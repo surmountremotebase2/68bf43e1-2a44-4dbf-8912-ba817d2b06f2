@@ -1,61 +1,65 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import RSI, EMA
-from surmount.data import SectorPerformance
+from surmount.data import Asset, AnalystRatings, Fundamentals
 from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        self.sectors = [
-            "XLY",  # Consumer Discretionary
-            "XLP",  # Consumer Staples
-            "XLE",  # Energy
-            "XLF",  # Financials
-            "XLV",  # Health Care
-            "XLI",  # Industrials
-            "XLB",  # Materials
-            "XLRE", # Real Estate
-            "XLK",  # Technology
-            "XLU",  # Utilities
-        ]
-        self.data_list = [SectorPerformance(i) for i in self.sectors]
+        self.tickers = ["AAPL", "FB", "AMZN", "NFLX", "GOOGL"]  # Example tech stocks
+        self.data_list = [Fundamentals(i) for i in self.tickers]
+        self.data_list += [AnalystRatings(i) for i in self.tickers]
 
     @property
     def interval(self):
-        return "1week"  # Adjusting the investment on a weekly basis
+        return "1day"
 
     @property
     def assets(self):
-        return self.sectors
+        return self.tickers
 
     @property
     def data(self):
         return self.data_list
 
     def run(self, data):
-        # Calculate the Relative Strength Index (RSI) for each sector
-        sector_strength = {}
-        for sector in self.sectors:
-            rsi_value = RDI(sector, data["ohlcv"], 14)  # 14 periods for RSI
-            if rsi_value:
-                sector_strength[sector] = rsi_value[-1]  # Take the last value
-            else:
-                sector_strength[sector] = None
+        allocations = {}
+        pbr_dict = {}  # Price-to-Book Ratio dictionary
+        downgrade_dict = {}  # Analyst Downgrades dictionary
         
-        # Filtering the sectors with the highest RSI values indicating strength
-        strong_sectors = dict(sorted(sector_strength.items(), 
-                                     key=lambda item: item[1] if item[1] is not None else 0, 
-                                     reverse=True)[:3])  # Top 3 sectors
+        # Fetch the fundamentals and analyst ratings for each ticker
+        for i in self.tickers:
+            fundamentals = data.get(('fundamentals', i), None)
+            ratings = data.get(('analyst_ratings', i), None)
 
-        allocation_dict = {}
-        if strong_sectors:
-            # Allocate equally among the top 3 sectors
-            allocation_value = 1.0 / len(strong_sectors) if strong_sectors else 0
-            for sector in self.sectors:
-                allocation_dict[sector] = allocation_value if sector in strong_sectors else 0
-        else:
-            # Allocate equally among all sectors if we can't determine the strength
-            allocation_value = 1.0 / len(self.sectors)
-            for sector in self.sectors:
-                allocation_dict[sector] = allocation_value
+            if fundamentals:
+                pbr = fundamentals['priceToBook']
+                pbr_dict[i] = pbr
+            
+            if ratings:
+                # Count downgrades in the latest analyst ratings
+                downgrades = sum(1 for rating in ratings if rating['action'] == 'downgrade')
+                downgrade_dict[i] = downgrades
 
-        return TargetAllocation(allocation_dict)
+        # Normalize and invert PBR scores (lower PBR indicates undervaluation)
+        min_pbr, max_pbr = min(pbr_dict.values()), max(pbr_dict.values())
+        for i in pbr_dict:
+            pbr_dict[i] = (max_pbr - pbr_dict[i]) / (max_pbr - min_pbr if max_pbr - min_pbr else 1)
+
+        # Normalize downgrade scores (more downgrades indicate overvaluation)
+        max_downgrades = max(downgrade_dict.values()) if downgrade_dict.values() else 0
+        for i in downgrade_dict:
+            downgrade_dict[i] = downgrade_memes[i] / max_downgrades if max_downgrades else 0
+
+        # Combine PBR and downgrade scores for a final valuation score (higher score indicates undervaluation)
+        for i in self.tickers:
+            pbr_score = pbr_dict.get(i, 0) * 0.5 # Weight can be adjusted
+            downgrade_score = downgrade_dict.get(i, 0) * 0.5 # Weight can be adjusted
+            final_score = pbr_score + downgrade_score
+            
+            # Here we decide on a strategy to short overvalued and buy undervalued stocks based on the final_score
+            # This example simply splits allocation equally among stocks considered as undervalued (final_score > threshold)
+            if final_score > 0.5:  # Threshold can be adjusted
+                allocations[i] = 1 / len(self.tickers)  # Equally weighted for simplicity
+            else:
+                allocations[i] = 0  # Do not allocate to overvalued stocks
+
+        return TargetAllocation(allocations)
