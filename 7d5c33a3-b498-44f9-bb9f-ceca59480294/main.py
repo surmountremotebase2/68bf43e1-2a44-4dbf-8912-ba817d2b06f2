@@ -1,44 +1,61 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import SMA
-from surmount.data import Asset
+from surmount.technical_indicators import RSI, EMA
+from surmount.data import SectorPerformance
+from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        # Initialize with the stock ticker you want to trade
-        self.ticker = "AAPL"
-
-    @property
-    def assets(self):
-        # Return a list of assets the strategy will handle
-        return [self.ticker]
+        self.sectors = [
+            "XLY",  # Consumer Discretionary
+            "XLP",  # Consumer Staples
+            "XLE",  # Energy
+            "XLF",  # Financials
+            "XLV",  # Health Care
+            "XLI",  # Industrials
+            "XLB",  # Materials
+            "XLRE", # Real Estate
+            "XLK",  # Technology
+            "XLU",  # Utilities
+        ]
+        self.data_list = [SectorPerformance(i) for i in self.sectors]
 
     @property
     def interval(self):
-        # Define the data interval to use for calculations
-        return "1day"
+        return "1week"  # Adjusting the investment on a weekly basis
+
+    @property
+    def assets(self):
+        return self.sectors
+
+    @property
+    def data(self):
+        return self.data_list
 
     def run(self, data):
-        # Extract closing prices
-        closes = [d[self.ticker]["close"] for d in data["ohlcv"]]
+        # Calculate the Relative Strength Index (RSI) for each sector
+        sector_strength = {}
+        for sector in self.sectors:
+            rsi_value = RDI(sector, data["ohlcv"], 14)  # 14 periods for RSI
+            if rsi_value:
+                sector_strength[sector] = rsi_value[-1]  # Take the last value
+            else:
+                sector_strength[sector] = None
         
-        # Calculate the 50-day SMA
-        sma_50 = SMA(self.ticker, data["ohlcv"], 50)
-        
-        # Determine the last closing price
-        latest_close = closes[-1]
+        # Filtering the sectors with the highest RSI values indicating strength
+        strong_sectors = dict(sorted(sector_strength.items(), 
+                                     key=lambda item: item[1] if item[1] is not None else 0, 
+                                     reverse=True)[:3])  # Top 3 sectors
 
-        # Initialize the allocation dictionary
-        allocation_dict = {self.ticker: 0}
+        allocation_dict = {}
+        if strong_sectors:
+            # Allocate equally among the top 3 sectors
+            allocation_value = 1.0 / len(strong_sectors) if strong_sectors else 0
+            for sector in self.sectors:
+                allocation_dict[sector] = allocation_value if sector in strong_sectors else 0
+        else:
+            # Allocate equally among all sectors if we can't determine the strength
+            allocation_value = 1.0 / len(self.sectors)
+            for sector in self.sectors:
+                allocation_dict[sector] = allocation_value
 
-        # Check if we have at least 50 days of data
-        if len(closes) >= 50:
-            # Compare the latest close to the SMA to determine the trend
-            if latest_close > sma_50[-1]:
-                # If the latest close is above the SMA, set allocation to 1 (buy)
-                allocation_dict[self.ticker] = 1
-            elif latest_close < sma_50[-1]:
-                # If the latest close is below the SMA, keep allocation at 0 (sell/hold)
-                allocation_dict[self.ticker] = 0
-
-        # Return the target allocation
         return TargetAllocation(allocation_dict)
