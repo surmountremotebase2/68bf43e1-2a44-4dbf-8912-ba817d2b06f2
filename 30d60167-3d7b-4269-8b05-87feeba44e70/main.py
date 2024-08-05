@@ -48,6 +48,7 @@ class TradingStrategy(Strategy):
         spy_data['returns'] = 100 * spy_data.close.pct_change().dropna()
         # CALCULATE LOG RETURNS BASED ON ABOVE FORMULA
         spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
+        spy_data = spy_data.fillna(0)
                 
         INTERVAL_WINDOW = 30
         n_future = 7
