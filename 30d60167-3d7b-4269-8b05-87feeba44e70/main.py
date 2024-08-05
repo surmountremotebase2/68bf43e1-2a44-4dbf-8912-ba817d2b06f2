@@ -40,11 +40,12 @@ class TradingStrategy(Strategy):
 
     def run(self, data):
         self.count += 7
-        spy_data = [entry['SPY'] for entry in data['ohlcv'] if 'SPY' in entry]
-        spy_data = pd.DataFrame(spy_data['close'])
-        spy_data['returns'] = 100 * spy_data.Close.pct_change().dropna()
+        spy_data = [entry['SPY']['close'] for entry in data['ohlcv'] if 'SPY' in entry]
+        spy_dates = [entry['SPY']['date'] for entry in data['ohlcv'] if 'SPY' in entry]
+        spy_data = pd.DataFrame(spy_data)
+        spy_data['returns'] = 100 * spy_data.close.pct_change().dropna()
         # CALCULATE LOG RETURNS BASED ON ABOVE FORMULA
-        spy_data['log_returns'] = np.log(spy_data.Close/spy_data.Close.shift(1))
+        spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
                 
         INTERVAL_WINDOW = 30
         n_future = 7
