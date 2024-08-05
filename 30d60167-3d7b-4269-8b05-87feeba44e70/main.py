@@ -60,7 +60,7 @@ class TradingStrategy(Strategy):
         # GET FORWARD LOOKING REALIZED VOLATILITY 
         spy_data['vol_future'] = spy_data.log_returns.shift(-n_future).fillna(0).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
                                         
-        log(f"{spy_data['vol_future'].iloc[-1]}")
+        #log(f"{spy_data['vol_future'].iloc[-1]}")
         
 
         if self.count % 7 == 0:
@@ -68,7 +68,7 @@ class TradingStrategy(Strategy):
 
             # Check if the current ATR or Realized Volatility is above the 7th or 8th decile
         if spy_data['vol_current'].iloc[-1] > spy_data['vol_future'].iloc[-1]:
-            log(f"Switching to cash allocation due to high volatility")
+            #log(f"Switching to cash allocation due to high volatility")
             return TargetAllocation({ticker: 0 for ticker in self.tickers})
         else:
             allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
