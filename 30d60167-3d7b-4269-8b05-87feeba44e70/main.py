@@ -36,7 +36,8 @@ class TradingStrategy(Strategy):
         of sum of squares of log returns within a specific window interval 
         """
         n = len(series_log_return)
-        return np.sqrt(np.sum(series_log_return**2)/(n - 1))
+        vola =  np.sqrt(np.sum(series_log_return**2)/(n - 1))
+        return vola
         #return series_log_return.rolling(window=252).std() * np.sqrt(252)       
 
 
