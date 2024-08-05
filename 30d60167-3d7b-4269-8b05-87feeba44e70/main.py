@@ -53,12 +53,12 @@ class TradingStrategy(Strategy):
 
         # GET BACKWARD LOOKING REALIZED VOLATILITY
         spy_data['vol_current'] = spy_data.log_returns.rolling(window=INTERVAL_WINDOW)\
-                                        .apply(realized_volatility_daily)
+                                        .apply(self.realized_volatility_daily)
 
         # GET FORWARD LOOKING REALIZED VOLATILITY 
         spy_data['vol_future'] = spy_data.log_returns.shift(-n_future)\
                                         .rolling(window=INTERVAL_WINDOW)\
-                                        .apply(realized_volatility_daily)
+                                        .apply(self.realized_volatility_daily)
                                         
 
         
