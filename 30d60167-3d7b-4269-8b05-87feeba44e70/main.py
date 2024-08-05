@@ -42,25 +42,25 @@ class TradingStrategy(Strategy):
         self.count += 7
         spy_data = [entry['SPY'] for entry in data['ohlcv'] if 'SPY' in entry]
         spy_data = pd.DataFrame(spy_data.Close, index=spy_data.date)
-        df['returns'] = 100 * spy_data.Close.pct_change().dropna()
+        spy_data['returns'] = 100 * spy_data.Close.pct_change().dropna()
         # CALCULATE LOG RETURNS BASED ON ABOVE FORMULA
-        df['log_returns'] = np.log(spy_data.Close/spy_data.Close.shift(1))
+        spy_data['log_returns'] = np.log(spy_data.Close/spy_data.Close.shift(1))
                 
         INTERVAL_WINDOW = 30
         n_future = 7
 
         # GET BACKWARD LOOKING REALIZED VOLATILITY
-        df['vol_current'] = df.log_returns.rolling(window=INTERVAL_WINDOW)\
+        spy_data['vol_current'] = spy_data.log_returns.rolling(window=INTERVAL_WINDOW)\
                                         .apply(realized_volatility_daily)
 
         # GET FORWARD LOOKING REALIZED VOLATILITY 
-        df['vol_future'] = df.log_returns.shift(-n_future)\
+        spy_data['vol_future'] = spy_data.log_returns.shift(-n_future)\
                                         .rolling(window=INTERVAL_WINDOW)\
                                         .apply(realized_volatility_daily)
                                         
 
         # Check if the current ATR or Realized Volatility is above the 7th or 8th decile
-        if spy_data['ATR'].iloc[-1] > atr_deciles[1] or spy_data['Realized Volatility'].iloc[-1] > vol_deciles[1]:
+        if spy_data['vol_current'].iloc[-1] > spy_data['vol_future'].iloc[-1]:
             log.info("Switching to cash allocation due to high volatility")
             return TargetAllocation({ticker: 0 for ticker in self.tickers})
         else:
