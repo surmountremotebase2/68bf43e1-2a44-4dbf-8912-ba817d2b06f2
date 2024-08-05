@@ -30,7 +30,7 @@ class TradingStrategy(Strategy):
     def assets(self):
         return self.tickers + self.bench
 
-    def realized_volatility_daily(series_log_return):
+    def realized_volatility_daily(self, series_log_return):
         """
         Get the daily realized volatility which is calculated as the square root
         of sum of squares of log returns within a specific window interval 
