@@ -50,17 +50,14 @@ class TradingStrategy(Strategy):
                 
         INTERVAL_WINDOW = 30
         n_future = 7
-        log(f"{spy_data['log_returns'].iloc[-1]}")
+        #log(f"{spy_data['log_returns'].iloc[-1]}")
         # GET BACKWARD LOOKING REALIZED VOLATILITY
-        spy_data['vol_current'] = spy_data.log_returns.rolling(window=INTERVAL_WINDOW)\
-                                        .apply(self.realized_volatility_daily)
+        spy_data['vol_current'] = spy_data.log_returns.rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
 
         # GET FORWARD LOOKING REALIZED VOLATILITY 
-        spy_data['vol_future'] = spy_data.log_returns.shift(-n_future)\
-                                        .rolling(window=INTERVAL_WINDOW)\
-                                        .apply(self.realized_volatility_daily)
+        spy_data['vol_future'] = spy_data.log_returns.shift(-n_future).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
                                         
-        #log(f"{spy_data['vol_future']}")
+        log(f"{spy_data['vol_future'].iloc[-1]}")
         
 
         if self.count % 7 == 0:
