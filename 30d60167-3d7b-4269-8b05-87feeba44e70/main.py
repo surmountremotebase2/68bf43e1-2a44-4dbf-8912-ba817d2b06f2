@@ -64,8 +64,8 @@ class TradingStrategy(Strategy):
         log(f"{spy_data['vol_future'].iloc[-1]}")
         
 
-        if self.count % 7 == 0:
-            allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
+        #if self.count % 7 == 0:
+        allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
 
             # Check if the current ATR or Realized Volatility is above the 7th or 8th decile
         if spy_data['vol_current'].iloc[-1] > spy_data['vol_future'].iloc[-1]:
