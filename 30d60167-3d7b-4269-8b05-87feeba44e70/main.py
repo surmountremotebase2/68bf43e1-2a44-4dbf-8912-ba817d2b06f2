@@ -77,7 +77,7 @@ class TradingStrategy(Strategy):
                 #log(f"Switching to cash allocation due to high volatility")
                 allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
                 return TargetAllocation(allocation_dict)
-
-        return TargetAllocation({ticker: 0 for ticker in self.tickers})
+        else:
+            return TargetAllocation({ticker: 0 for ticker in self.tickers})
             return TargetAllocation(allocation_dict)
         return None
