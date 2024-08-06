@@ -70,7 +70,7 @@ class TradingStrategy(Strategy):
             allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
 
                 # Check if the current ATR or Realized Volatility is above the 7th or 8th decile
-            if spy_data['vol_current'].iloc[-1] > spy_data['vol_future'].iloc[-1] or spy_data['vol_current'] > volaT:
+            if spy_data['vol_current'].iloc[-1] > spy_data['vol_future'].iloc[-1] or spy_data['vol_current'].iloc[-1] > volaT:
                 #log(f"Switching to cash allocation due to high volatility")
                 return TargetAllocation({ticker: 0 for ticker in self.tickers})
             else:
