@@ -64,7 +64,7 @@ class TradingStrategy(Strategy):
             spy_data['vol_future'] = spy_data.log_returns.shift(n_future).fillna(0).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
                                             
             #log(f"{spy_data['vol_future'].iloc[-1]}")
-            volaT = np.percentile(spy_data['vol_current'], 50)
+            volaT = np.percentile(spy_data['vol_current'], 40)
 
             #if self.count % 7 == 0:
             allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
