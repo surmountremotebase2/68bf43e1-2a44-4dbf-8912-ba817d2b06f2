@@ -50,8 +50,8 @@ class TradingStrategy(Strategy):
         # CALCULATE LOG RETURNS BASED ON ABOVE FORMULA
         spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
         spy_data = spy_data.fillna(0)
-        INTERVAL_WINDOW = 30
-        n_future = 30
+        INTERVAL_WINDOW = 60
+        n_future = 20
 
         if len(spy_data) > n_future:
 
