@@ -51,7 +51,7 @@ class TradingStrategy(Strategy):
         spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
         spy_data = spy_data.fillna(0)
         INTERVAL_WINDOW = 30
-        n_future = 15
+        n_future = 30
 
         if len(spy_data) > n_future:
 
