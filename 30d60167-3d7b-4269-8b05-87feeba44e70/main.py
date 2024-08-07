@@ -58,12 +58,12 @@ class TradingStrategy(Strategy):
             #log(f"{spy_data['log_returns'].iloc[-1]}")
             # GET BACKWARD LOOKING REALIZED VOLATILITY
             spy_data['vol_current'] = spy_data.log_returns.rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
-            spy_data['vol_current'] = spy_data['vol_current'].rolling(5).mean()
+            spy_data['vol_current'] = spy_data['vol_current'].rolling(3).mean()
             #log(f"{spy_data['vol_current'].iloc[-1]}")
 
             # GET FORWARD LOOKING REALIZED VOLATILITY 
             spy_data['vol_future'] = spy_data.log_returns.shift(n_future).fillna(0).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
-            spy_data['vol_future'] = spy_data['vol_future'].rolling(10).mean()
+            spy_data['vol_future'] = spy_data['vol_future'].rolling(15).mean()
                                             
             #log(f"{spy_data['vol_future'].iloc[-1]}")
             volaT = np.percentile(spy_data['vol_current'], 40)
