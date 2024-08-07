@@ -50,8 +50,8 @@ class TradingStrategy(Strategy):
         # CALCULATE LOG RETURNS BASED ON ABOVE FORMULA
         spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
         spy_data = spy_data.fillna(0)
-        INTERVAL_WINDOW = 60
-        n_future = 20
+        INTERVAL_WINDOW = 50
+        n_future = 25
 
         if len(spy_data) > n_future:
 
@@ -63,7 +63,7 @@ class TradingStrategy(Strategy):
 
             # GET FORWARD LOOKING REALIZED VOLATILITY 
             spy_data['vol_future'] = spy_data.log_returns.shift(n_future).fillna(0).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
-            spy_data['vol_future'] = spy_data['vol_future'].rolling(5).mean()
+            spy_data['vol_future'] = spy_data['vol_future'].rolling(10).mean()
                                             
             #log(f"{spy_data['vol_future'].iloc[-1]}")
             volaT = np.percentile(spy_data['vol_current'], 40)
