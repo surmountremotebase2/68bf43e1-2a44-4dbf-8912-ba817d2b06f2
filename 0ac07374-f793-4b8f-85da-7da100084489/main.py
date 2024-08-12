@@ -11,7 +11,7 @@ class TradingStrategy(Strategy):
       self.weights = [0.065, 0.065, 0.065, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.020, 0.020, 0.020, 0.020, 0.020]
       self.equal_weighting = False
       self.mrkt = ["QQQ"]
-      self.count = 5
+      self.count = 3
 
    @property
    def interval(self):
