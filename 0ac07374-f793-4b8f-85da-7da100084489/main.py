@@ -34,6 +34,7 @@ class TradingStrategy(Strategy):
       today = datetime.strptime(str(next(iter(data['ohlcv'][-1].values()))['date']), '%Y-%m-%d %H:%M:%S')
       yesterday = datetime.strptime(str(next(iter(data['ohlcv'][-2].values()))['date']), '%Y-%m-%d %H:%M:%S')
 
+      allocation_dict = {}
       spy_data = [entry['SPY']['close'] for entry in data['ohlcv'] if 'SPY' in entry]
       spy_data = pd.DataFrame(spy_data, columns=['close'])
       spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
@@ -65,10 +66,16 @@ class TradingStrategy(Strategy):
                self.count = 15
          elif self.count < 1:
             #allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
+            if self.equal_weighting: 
+               allocation_dict = {i: 1/len(self.tickers) for i in self.tickers}
+            else:
+               allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
             return TargetAllocation(allocation_dict)
          else:
             return TargetAllocation({ticker: 0 for ticker in self.tickers})
 
+      else:
+         return TargetAllocation(allocation_dict)
       
       
          return TargetAllocation(allocation_dict)
