@@ -62,9 +62,9 @@ class TradingStrategy(Strategy):
          if (spy_data['vol_current'].iloc[-1] > spy_data['vol_future'].iloc[-1] and spy_data['vol_current'].iloc[-1] > volaT):
             
             if spy_data['vol_current'].iloc[-1] > volaH:
-               self.count = 20
-            else:
                self.count = 15
+            else:
+               self.count = 7
             allocation_dict = {ticker: 0 for ticker in self.tickers}
             return TargetAllocation(allocation_dict)
          elif self.count < 1:
