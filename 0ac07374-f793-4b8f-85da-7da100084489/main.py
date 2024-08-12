@@ -41,7 +41,7 @@ class TradingStrategy(Strategy):
       spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
       spy_data = spy_data.fillna(0)
       INTERVAL_WINDOW = 60
-      n_future = 20
+      n_future = 10
 
       if today.day == 14 or (today.day > 14 and yesterday.day < 14):
          if self.equal_weighting: 
