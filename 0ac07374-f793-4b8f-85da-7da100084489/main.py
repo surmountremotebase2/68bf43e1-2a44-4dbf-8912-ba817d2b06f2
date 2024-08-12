@@ -40,7 +40,7 @@ class TradingStrategy(Strategy):
       spy_data = pd.DataFrame(spy_data, columns=['close'])
       spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
       spy_data = spy_data.fillna(0)
-      INTERVAL_WINDOW = 60
+      INTERVAL_WINDOW = 40
       n_future = 10
 
       if today.day == 14 or (today.day > 14 and yesterday.day < 14):
