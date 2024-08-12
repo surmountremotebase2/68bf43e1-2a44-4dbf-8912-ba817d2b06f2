@@ -31,6 +31,7 @@ class TradingStrategy(Strategy):
       return vola
 
    def run(self, data):
+      self.count -= 1
       today = datetime.strptime(str(next(iter(data['ohlcv'][-1].values()))['date']), '%Y-%m-%d %H:%M:%S')
       yesterday = datetime.strptime(str(next(iter(data['ohlcv'][-2].values()))['date']), '%Y-%m-%d %H:%M:%S')
 
