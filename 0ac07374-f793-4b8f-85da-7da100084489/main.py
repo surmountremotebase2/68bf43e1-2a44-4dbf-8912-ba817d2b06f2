@@ -10,7 +10,7 @@ class TradingStrategy(Strategy):
       self.tickers = ["INTC", "TMO", "AMAT", "MMM", "ASML", "NVDA", "LRCX", "ILMN", "TSM", "AMD", "MU", "NXPI", "JNJ", "PFE", "MRK", "GILD", "ABBV", "BMY", "REGN", "AMGN", "FSLR", "SPWR", "ENPH", "SEDG", "BLDP"]
       self.weights = [0.065, 0.065, 0.065, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.035, 0.020, 0.020, 0.020, 0.020, 0.020]
       self.equal_weighting = False
-      self.mrkt = ["SPY"]
+      self.mrkt = ["QQQ"]
       self.count = 5
 
    @property
@@ -36,7 +36,7 @@ class TradingStrategy(Strategy):
       yesterday = datetime.strptime(str(next(iter(data['ohlcv'][-2].values()))['date']), '%Y-%m-%d %H:%M:%S')
 
       allocation_dict = {}
-      spy_data = [entry['SPY']['close'] for entry in data['ohlcv'] if 'SPY' in entry]
+      spy_data = [entry['QQQ']['close'] for entry in data['ohlcv'] if 'QQQ' in entry]
       spy_data = pd.DataFrame(spy_data, columns=['close'])
       spy_data['log_returns'] = np.log(spy_data.close/spy_data.close.shift(1))
       spy_data = spy_data.fillna(0)
