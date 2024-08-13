@@ -71,7 +71,6 @@ class TradingStrategy(Strategy):
             allocation_dict = {ticker: 0 for ticker in self.tickers}
             return TargetAllocation(allocation_dict)
          elif self.count < 1 and mrktClose > mrktEMA[-1]:
-            #allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
             allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
             return TargetAllocation(allocation_dict)
          else:
