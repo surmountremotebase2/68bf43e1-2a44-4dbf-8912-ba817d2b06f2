@@ -18,7 +18,7 @@ class TradingStrategy(Strategy):
             0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02,
             0.02, 0.02, 0.02, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01,
         ]
-        self.mrkt = "VNQ"
+        self.mrkt = "SPY"
         self.count = 5
 
     @property
