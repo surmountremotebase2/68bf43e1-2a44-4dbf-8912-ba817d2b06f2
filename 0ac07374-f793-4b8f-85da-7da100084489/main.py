@@ -36,7 +36,7 @@ class TradingStrategy(Strategy):
       today = datetime.strptime(str(next(iter(data['ohlcv'][-1].values()))['date']), '%Y-%m-%d %H:%M:%S')
       yesterday = datetime.strptime(str(next(iter(data['ohlcv'][-2].values()))['date']), '%Y-%m-%d %H:%M:%S')
 
-      allocation_dict = {}
+      allocation_dict = {ticker: 0 for ticker in self.tickers}
       mrktData = [entry[self.mrkt]['close'] for entry in data['ohlcv'] if self.mrkt in entry]
       mrktData = pd.DataFrame(mrktData, columns=['close'])
       mrktData['log_returns'] = np.log(mrktData.close/mrktData.close.shift(1))
