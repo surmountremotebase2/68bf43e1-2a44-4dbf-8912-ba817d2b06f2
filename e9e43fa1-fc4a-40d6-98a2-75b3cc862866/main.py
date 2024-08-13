@@ -47,7 +47,7 @@ class TradingStrategy(Strategy):
             n_future = 20
 
             if today.day == 14 or (today.day > 14 and yesterday.day < 14):
-                return TargetAllocation({k: 1/len(self.tickers) for k in self.tickers})
+                allocation_dict = {k: 1/len(self.tickers) for k in self.tickers}
         
             if len(mrktData) > n_future:
                 # GET BACKWARD LOOKING REALIZED VOLATILITY
@@ -69,7 +69,7 @@ class TradingStrategy(Strategy):
                         self.count = 5
                     allocation_dict = {ticker: 0 for ticker in self.tickers}
                 elif self.count < 1 and mrktClose > mrktEMA[-1]:
-                    allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
+                    allocation_dict = {k: 1/len(self.tickers) for k in self.tickers}
                 else:
                     allocation_dict = {ticker: 0 for ticker in self.tickers}
 
@@ -77,5 +77,3 @@ class TradingStrategy(Strategy):
 
 
         return None
-
-        
