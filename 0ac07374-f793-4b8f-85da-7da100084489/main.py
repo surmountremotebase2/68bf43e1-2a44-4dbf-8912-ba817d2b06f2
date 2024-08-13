@@ -73,9 +73,8 @@ class TradingStrategy(Strategy):
             allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
          else:
             allocation_dict = {ticker: 0 for ticker in self.tickers}
-
+      
       return TargetAllocation(allocation_dict)
-      
-      
+
          return TargetAllocation(allocation_dict)
       return None
