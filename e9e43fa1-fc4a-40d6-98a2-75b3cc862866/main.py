@@ -3,6 +3,8 @@ from surmount.technical_indicators import RSI, EMA, SMA, MACD, MFI, BB
 from surmount.logging import log
 from surmount.data import Asset, InstitutionalOwnership, InsiderTrading
 from datetime import datetime
+import pandas as pd
+import numpy as np
 
 class TradingStrategy(Strategy):
 
@@ -75,3 +77,5 @@ class TradingStrategy(Strategy):
 
 
         return None
+
+        
