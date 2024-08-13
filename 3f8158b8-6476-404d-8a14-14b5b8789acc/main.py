@@ -73,9 +73,9 @@ class TradingStrategy(Strategy):
                 if (mrktData['vol_current'].iloc[-1] > mrktData['vol_future'].iloc[-1] and mrktData['vol_current'].iloc[-1] > volaT):
                     
                     if mrktData['vol_current'].iloc[-1] > volaH:
-                    self.count = 10
+                        self.count = 10
                     else:
-                    self.count = 5
+                        self.count = 5
                     allocation_dict = {ticker: 0 for ticker in self.tickers}
                 elif self.count < 1 and mrktClose > mrktEMA[-1]:
                     total_weight = sum(self.weights)
