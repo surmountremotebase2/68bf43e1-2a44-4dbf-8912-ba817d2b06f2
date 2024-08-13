@@ -11,11 +11,11 @@ class TradingStrategy(Strategy):
         self.mrkt = "SPY"
         self.count = 3
 
-   @property
+    @property
     def interval(self):
         return "1day"
 
-   @property
+    @property
     def assets(self):
         return self.tickers + [self.mrkt]
 
