@@ -1,5 +1,6 @@
 from surmount.base_class import Strategy, TargetAllocation, backtest
 from surmount.logging import log
+from surmount.technical_indicators import EMA
 from datetime import datetime
 import pandas as pd
 import numpy as np
