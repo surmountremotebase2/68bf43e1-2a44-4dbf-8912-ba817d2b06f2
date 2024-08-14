@@ -32,46 +32,50 @@ class TradingStrategy(Strategy):
       return vola
 
    def run(self, data):
-      self.count -= 1
-      today = datetime.strptime(str(next(iter(data['ohlcv'][-1].values()))['date']), '%Y-%m-%d %H:%M:%S')
-      yesterday = datetime.strptime(str(next(iter(data['ohlcv'][-2].values()))['date']), '%Y-%m-%d %H:%M:%S')
 
-      allocation_dict = {ticker: 0 for ticker in self.tickers}
-      mrktData = [entry[self.mrkt]['close'] for entry in data['ohlcv'] if self.mrkt in entry]
-      mrktData = pd.DataFrame(mrktData, columns=['close'])
-      mrktData['log_returns'] = np.log(mrktData.close/mrktData.close.shift(1))
-      mrktData = mrktData.fillna(0)
-      INTERVAL_WINDOW = 60
-      n_future = 20
+      if len(data) > 0:
+         self.count -= 1
+         today = datetime.strptime(str(next(iter(data['ohlcv'][-1].values()))['date']), '%Y-%m-%d %H:%M:%S')
+         yesterday = datetime.strptime(str(next(iter(data['ohlcv'][-2].values()))['date']), '%Y-%m-%d %H:%M:%S')
 
-      if today.day == 14 or (today.day > 14 and yesterday.day < 14):
-         if self.equal_weighting: 
-            allocation_dict = {i: 1/len(self.tickers) for i in self.tickers}
-         else:
-            allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
+         allocation_dict = {ticker: 0 for ticker in self.tickers}
+         mrktData = [entry[self.mrkt]['close'] for entry in data['ohlcv'] if self.mrkt in entry]
+         mrktData = pd.DataFrame(mrktData, columns=['close'])
+         mrktData['log_returns'] = np.log(mrktData.close/mrktData.close.shift(1))
+         mrktData = mrktData.fillna(0)
+         INTERVAL_WINDOW = 60
+         n_future = 20
 
-      if len(mrktData) > n_future:
-         # GET BACKWARD LOOKING REALIZED VOLATILITY
-         mrktData['vol_current'] = mrktData.log_returns.rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
-         mrktData['vol_current'] = mrktData['vol_current'].bfill()
-         # GET FORWARD LOOKING REALIZED VOLATILITY 
-         mrktData['vol_future'] = mrktData.log_returns.shift(n_future).fillna(0).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
-         mrktData['vol_future'] = mrktData['vol_future'].bfill()
-         volaT = np.percentile(mrktData['vol_current'], 55)
-         volaH = np.percentile(mrktData['vol_current'], 80)
-         mrktEMA = EMA(self.mrkt, data["ohlcv"], length=200)
-         mrktClose = mrktData.close.iloc[-1]
-
-         if (mrktData['vol_current'].iloc[-1] > mrktData['vol_future'].iloc[-1] and mrktData['vol_current'].iloc[-1] > volaT):
-            
-            if mrktData['vol_current'].iloc[-1] > volaH:
-               self.count = 10
+         if today.day == 14 or (today.day > 14 and yesterday.day < 14):
+            if self.equal_weighting: 
+               allocation_dict = {i: 1/len(self.tickers) for i in self.tickers}
             else:
-               self.count = 5
-            allocation_dict = {ticker: 0 for ticker in self.tickers}
-         elif self.count < 1 and mrktClose > mrktEMA[-1]:
-            allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
-         else:
-            allocation_dict = {ticker: 0 for ticker in self.tickers}
+               allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
 
-      return TargetAllocation(allocation_dict)
+         if len(mrktData) > n_future:
+            # GET BACKWARD LOOKING REALIZED VOLATILITY
+            mrktData['vol_current'] = mrktData.log_returns.rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
+            mrktData['vol_current'] = mrktData['vol_current'].bfill()
+            # GET FORWARD LOOKING REALIZED VOLATILITY 
+            mrktData['vol_future'] = mrktData.log_returns.shift(n_future).fillna(0).rolling(window=INTERVAL_WINDOW).apply(self.realized_volatility_daily)
+            mrktData['vol_future'] = mrktData['vol_future'].bfill()
+            volaT = np.percentile(mrktData['vol_current'], 55)
+            volaH = np.percentile(mrktData['vol_current'], 80)
+            mrktEMA = EMA(self.mrkt, data["ohlcv"], length=200)
+            mrktClose = mrktData.close.iloc[-1]
+
+            if (mrktData['vol_current'].iloc[-1] > mrktData['vol_future'].iloc[-1] and mrktData['vol_current'].iloc[-1] > volaT):
+               
+               if mrktData['vol_current'].iloc[-1] > volaH:
+                  self.count = 10
+               else:
+                  self.count = 5
+               allocation_dict = {ticker: 0 for ticker in self.tickers}
+            elif self.count < 1 and mrktClose > mrktEMA[-1]:
+               allocation_dict = {self.tickers[i]: self.weights[i] for i in range(len(self.tickers))}
+            else:
+               allocation_dict = {ticker: 0 for ticker in self.tickers}
+
+         return TargetAllocation(allocation_dict)
+
+      return None
