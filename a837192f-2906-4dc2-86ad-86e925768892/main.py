@@ -29,6 +29,16 @@ class TradingStrategy(Strategy):
    def data(self):
       return self.data_list
 
+   def realized_volatility_daily(self, series_log_return):
+      """
+      Get the daily realized volatility which is calculated as the square root
+      of sum of squares of log returns within a specific window interval 
+      """
+      n = len(series_log_return)
+      vola =  np.sqrt(np.sum(series_log_return**2)/(n - 1))
+      return vola
+
+
    def run(self, data):
       
       if len(data) > 0:
