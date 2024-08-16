@@ -80,8 +80,8 @@ class TradingStrategy(Strategy):
                         sales = len([i for i in data[tuple(i)][-20:] if "Sale" in i['transactionType']])
                         if sales/20 > 0.4:
                            allocation_dict[tuple(i)[1]] = 0
-               else:
-                  allocation_dict = {ticker: 0 for ticker in self.tickers}
+            else:
+               allocation_dict = {ticker: 0 for ticker in self.tickers}
 
          return TargetAllocation(allocation_dict)
 
