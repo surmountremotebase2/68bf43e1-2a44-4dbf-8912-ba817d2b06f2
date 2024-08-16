@@ -84,5 +84,6 @@ class TradingStrategy(Strategy):
                allocation_dict = {ticker: 0 for ticker in self.tickers}
 
          return TargetAllocation(allocation_dict)
+      
       else:
          return None
