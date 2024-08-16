@@ -23,7 +23,18 @@ class TradingStrategy(Strategy):
 
     @property
     def assets(self):
-        return self.tickers
+        return self.tickers + [self.mrkt]
+        #return self.tickers
+
+
+    def realized_volatility_daily(self, series_log_return):
+        """
+        Get the daily realized volatility which is calculated as the square root
+        of sum of squares of log returns within a specific window interval 
+        """
+        n = len(series_log_return)
+        vola =  np.sqrt(np.sum(series_log_return**2)/(n - 1))
+        return vola
 
     def run(self, data):
         if len(data) > 0:
@@ -42,7 +53,7 @@ class TradingStrategy(Strategy):
                 # Normalize the weights to add up to 1
                 total_weight = sum(self.weights)
                 allocation_dict = {self.tickers[i]: self.weights[i]/total_weight for i in range(len(self.tickers))}
-                return TargetAllocation(allocation_dict)
+                #return TargetAllocation(allocation_dict)
             
             if len(mrktData) > n_future:
                 # GET BACKWARD LOOKING REALIZED VOLATILITY
@@ -59,11 +70,12 @@ class TradingStrategy(Strategy):
                 if (mrktData['vol_current'].iloc[-1] > mrktData['vol_future'].iloc[-1] and mrktData['vol_current'].iloc[-1] > volaT):
                     
                     if mrktData['vol_current'].iloc[-1] > volaH:
-                        self.count = 10
-                    else:
                         self.count = 5
+                    else:
+                        self.count = 3
                     allocation_dict = {ticker: 0 for ticker in self.tickers}
-                elif self.count < 1 and mrktClose > mrktEMA[-1]:
+
+                elif self.count < 1 and mrktClose > mrktEMA[-2]:
                     total_weight = sum(self.weights)
                     allocation_dict = {self.tickers[i]: self.weights[i]/total_weight for i in range(len(self.tickers))}
                 else:
