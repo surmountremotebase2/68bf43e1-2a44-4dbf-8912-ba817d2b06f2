@@ -2,13 +2,12 @@ from surmount.base_class import Strategy, TargetAllocation
 from surmount.logging import log
 
 class TradingStrategy(Strategy):
-    def __init__(self):
-        # Defines a single ticker, SPY for this strategy.
-        self.ticker = "SPY"
+    def __init__(self        # Defines a single ticker, SPY for this strategy        
+    self.ticker =SPY"
 
     @property
     def assets(self):
-        # Returns a list containing just the SPY ETF, denoting we're only interested in trading SPY.
+        # a list containing just the SPY ETF, denoting we're only interested in trading SPY.
         return [self.ticker]
 
     @property
@@ -24,7 +23,7 @@ class TradingStrategy(Strategy):
         # corresponding allocation percentages as fractions of 1.
         allocation_dict = {self.ticker: 1.0}  # 100% allocation to SPY
 
-        # Logging for monitoring purposes, not necessary but useful for debugging.
+        # Logging purposes, not necessary but useful for debugging.
         log(f"Allocating 100% to {self.ticker}")
 
         return TargetAllocation(allocation_dict)
