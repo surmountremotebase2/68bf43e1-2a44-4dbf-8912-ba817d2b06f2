@@ -36,7 +36,7 @@ class TradingStrategy(Strategy):
             # Decision to go short if the close is below the lower Bollinger Band
             elif current_price < nvda_bbands['lower'][-1]:
                 log("Going short on NVDA")
-                nvda_stake = -1  # Short-selling NVDA
+                nvda_stake = -.1  # Short-selling NVDA
             
             # Close position if the close crosses the middle Bollinger Band
             elif nvda_bbands['lower'][-1] < current_price < nvda_bbands['upper'][-1]:
