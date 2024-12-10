@@ -24,9 +24,6 @@ class TradingStrategy(Strategy):
    def assets(self):
       return self.tickers + [self.mrkt]
 
-   @property
-   def data(self):
-      return self.data_list
 
    def realized_volatility_daily(self, series_log_return):
       """
