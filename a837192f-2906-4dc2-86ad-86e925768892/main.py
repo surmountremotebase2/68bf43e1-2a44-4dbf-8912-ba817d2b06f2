@@ -1,7 +1,6 @@
 from surmount.base_class import Strategy, TargetAllocation, backtest
 from surmount.logging import log
 from surmount.technical_indicators import SMA, BB, RSI, EMA
-#from surmount.data import Asset, InstitutionalOwnership, InsiderTrading
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -12,7 +11,7 @@ class TradingStrategy(Strategy):
    def __init__(self):
       self.tickers = ["NFLX", "GOOGL", "AAPL", "AMZN", "META"]
       # self.data_list = [InstitutionalOwnership(i) for i in self.tickers]
-      self.data_list = [InsiderTrading(i) for i in self.tickers]
+      #self.data_list = [InsiderTrading(i) for i in self.tickers]
       self.mrkt = "QQQ"
       self.count = 5
 
