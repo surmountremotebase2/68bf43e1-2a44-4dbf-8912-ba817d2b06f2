@@ -73,7 +73,7 @@ class TradingStrategy(Strategy):
                allocation_dict = {ticker: 0 for ticker in self.tickers}
 
             elif self.count < 1 and mrktClose > mrktEMA[-2]:
-               allocation_dict = {i: 1/len(self.tickers` for i in self.tickers}
+               allocation_dict = {i: 1/len(self.tickers) for i in self.tickers}
                for i in self.data_list:
                   if tuple(i)[0]=="insider_trading":
                      if data[tuple(i)] and len(data[tuple(i)])>0:
