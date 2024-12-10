@@ -77,7 +77,8 @@ class TradingStrategy(Strategy):
                for i in self.data_list:
                   if tuple(i)[0]=="insider_trading":
                      if data[tuple(i)] and len(data[tuple(i)])>0:
-                        sales = len([i for i in data[tuple(i)][-20:] if "Sale" in i['transactionType'])
+                        #sales = len([i for i in data[tuple(i)][-20:] if "Sale" in i['transactionType'])
+                        sales = len([item for item in data[tuple(i)][-20:] if "Sale" in item['transactionType']])
                         if sales/20 > 0.4:
                            allocation_dict[tuple(i)[1]] = 0
             else:
