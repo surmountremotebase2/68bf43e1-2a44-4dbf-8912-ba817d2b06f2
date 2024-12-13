@@ -7,7 +7,7 @@ class TradingStrategy(Strategy):
     @property
     def assets(self):
         # This strategy focuses on NVDA
-        return ["NVDA"]
+        return ["AAPL"]
 
     @property
     def interval(self):
