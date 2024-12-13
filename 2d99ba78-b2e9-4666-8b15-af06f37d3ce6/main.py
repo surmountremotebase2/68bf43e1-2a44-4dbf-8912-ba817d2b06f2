@@ -3,11 +3,15 @@ from surmount.technical_indicators import BB
 from surmount.logging import log
 
 class TradingStrategy(Strategy):
+    def __init__(self):
+        self.tickers = ["NVDA"]
+        self.period = 20
+        self.std_dev_multiplier = 1.2
 
     @property
     def assets(self):
         # This strategy focuses on NVDA
-        return ["AAPL"]
+        return ["NVDA"]
 
     @property
     def interval(self):
@@ -15,41 +19,35 @@ class TradingStrategy(Strategy):
         return "1hour"
 
     def run(self, data):
-        # Initialize zero allocation for NVDA
-        nvda_stake = 0
+       
+        allocation_dict = {}
+        for ticker in self.tickers:
+            # Access historical closing prices for the ticker
+            closes = [i[ticker]["close"] for i in data["ohlcv"]]
+            # Compute Bollinger Bands components (middle, upper, lower)
+            bb = BB(ticker, data["ohlcv"], self.period, self.std_dev_multiplier)
+            # Assuming the use of a custom Kalman filter function implemented externally
+            ema = EMA(ticker, data["ohlcv"], 5)
+    
+            current_price = closes[-1]
+            upper_band = bb["upper"][-1]
+            middle_band = bb["mid"][-1]
+            lower_band = bb["lower"][-1]
+    
+            allocation = 0
+            # Condition to enter a trade
+            if current_price > upper_band:  # Breakout above upper band
+                allocation = 1  # Allocating 100% to buy signal, assuming bullish sentiment
+            # Exit trade if price touches the middle band or based on Kalman filter estimation
+            elif current_price < ema[-1] and current_price < lower_band:
+                allocation = -.1
 
-        # Fetch hourly data for NVDA
-        data_nvda = data["ohlcv"]["MSFT"]
 
-        if len(data_nvda) >= 20:  # Check if there's enough data for calculation
-            # Calculate Bollinger Bands for NVDA
-            nvda_bbands = BB("MSFT", [data_nvda], 20, 2)  # Using std deviation of 2 for bands
+            if allocation_dict[ticker] == 1 and current_price < ema[-1]:  # Simplified condition
+                allocation = 0  # No position
+            elif allocation_dict[ticker] == -.1 and current_price > ema[-1]:
+                allocation = 0
 
-            # Get the latest close price for NVDA
-            current_price = data_nvda[-1]['close']
+            allocation_dict[ticker] = allocation
 
-            # Decision to go long if the close is above the upper Bollinger Band
-            if current_price > nvda_bbands['upper'][-1]:
-                log("Going long on MSFT")
-                nvda_stake = 1  # Going long
-
-            # Decision to go short if the close is below the lower Bollinger Band
-            elif current_price < nvda_bbands['lower'][-1]:
-                log("Going short on MSFT")
-                nvda_stake = -.1  # Short-selling NVDA
-            
-            # Close position if the close crosses the middle Bollinger Band
-            elif nvda_bbands['lower'][-1] < current_price < nvda_bbands['upper'][-1]:
-                if data["holdings"]["MSFT"] != 0:  # Check if there's an existing position
-                    log("Closing position on MSFT")
-                    nvda_stake = 0  # Closing any existing position
-            else:
-                log("No action for MSFT")
-
-        else:
-            log("Not enough data to calculate Bollinger Bands for NVDA")
-        
-        # Create and return the target allocation object
-        # Note: For simplification, short position indicated by negative value
-        # In actual trading environment, consider using separate handling for short positions
-        return TargetAllocation({"NVDA": nvda_stake})
+        return TargetAllocation(allocation_dict)
