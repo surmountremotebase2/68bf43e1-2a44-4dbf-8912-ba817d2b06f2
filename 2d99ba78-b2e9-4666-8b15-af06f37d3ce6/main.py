@@ -19,32 +19,32 @@ class TradingStrategy(Strategy):
         nvda_stake = 0
 
         # Fetch hourly data for NVDA
-        data_nvda = data["ohlcv"]["NVDA"]
+        data_nvda = data["ohlcv"]["MSFT"]
 
         if len(data_nvda) >= 20:  # Check if there's enough data for calculation
             # Calculate Bollinger Bands for NVDA
-            nvda_bbands = BB("NVDA", [data_nvda], 20, 2)  # Using std deviation of 2 for bands
+            nvda_bbands = BB("MSFT", [data_nvda], 20, 2)  # Using std deviation of 2 for bands
 
             # Get the latest close price for NVDA
             current_price = data_nvda[-1]['close']
 
             # Decision to go long if the close is above the upper Bollinger Band
             if current_price > nvda_bbands['upper'][-1]:
-                log("Going long on NVDA")
+                log("Going long on MSFT")
                 nvda_stake = 1  # Going long
 
             # Decision to go short if the close is below the lower Bollinger Band
             elif current_price < nvda_bbands['lower'][-1]:
-                log("Going short on NVDA")
+                log("Going short on MSFT")
                 nvda_stake = -.1  # Short-selling NVDA
             
             # Close position if the close crosses the middle Bollinger Band
             elif nvda_bbands['lower'][-1] < current_price < nvda_bbands['upper'][-1]:
-                if data["holdings"]["NVDA"] != 0:  # Check if there's an existing position
-                    log("Closing position on NVDA")
+                if data["holdings"]["MSFT"] != 0:  # Check if there's an existing position
+                    log("Closing position on MSFT")
                     nvda_stake = 0  # Closing any existing position
             else:
-                log("No action for NVDA")
+                log("No action for MSFT")
 
         else:
             log("Not enough data to calculate Bollinger Bands for NVDA")
