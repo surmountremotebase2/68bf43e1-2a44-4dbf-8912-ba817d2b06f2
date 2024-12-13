@@ -29,7 +29,7 @@ class TradingStrategy(Strategy):
             # Compute Bollinger Bands components (middle, upper, lower)
             bb = BB(ticker, data["ohlcv"], self.period, self.std_dev_multiplier)
             # Assuming the use of a custom Kalman filter function implemented externally
-            ema = EMA(ticker, data["ohlcv"], 5)
+            ema = EMA(ticker, data["ohlcv"], 10)
     
             current_price = closes[-1]
             upper_band = bb["upper"][-1]
