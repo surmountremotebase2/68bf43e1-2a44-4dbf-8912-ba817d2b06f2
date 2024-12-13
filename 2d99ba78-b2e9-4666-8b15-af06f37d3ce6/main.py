@@ -11,7 +11,7 @@ class TradingStrategy(Strategy):
     @property
     def assets(self):
         # This strategy focuses on NVDA
-        return ["NVDA"]
+        return self.tickers
 
     @property
     def interval(self):
@@ -21,6 +21,7 @@ class TradingStrategy(Strategy):
     def run(self, data):
        
         allocation_dict = {}
+        
         for ticker in self.tickers:
             # Access historical closing prices for the ticker
             closes = [i[ticker]["close"] for i in data["ohlcv"]]
