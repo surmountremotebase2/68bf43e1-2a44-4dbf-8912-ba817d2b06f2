@@ -21,7 +21,7 @@ class TradingStrategy(Strategy):
     def run(self, data):
        
         allocation_dict = {}
-        allocation_dict[ticker] = 1
+        allocation_dict["NVDA"] = 1
         
         for ticker in self.tickers:
             # Access historical closing prices for the ticker
