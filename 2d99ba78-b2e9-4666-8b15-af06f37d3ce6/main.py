@@ -47,7 +47,7 @@ class TradingStrategy(Strategy):
 
             if allocation_dict[ticker] == 1 and current_price < ema[-1]:  # Simplified condition
                 allocation = 0  # No position
-            elif allocation_dict[ticker] == -.1 and current_price > ema[-1]:
+            elif allocation_dict[ticker] == -1 and current_price > ema[-1]:
                 allocation = 0
 
             allocation_dict[ticker] = allocation
