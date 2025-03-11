@@ -1,7 +1,8 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import RSI, SMA, Momentum, STDEV
+from surmount.technical_indicators import RSI, SMA, STDEV
 from surmount.logging import log
 import pandas as pd
+import numpy as np
 
 class TradingStrategy(Strategy):
     def __init__(self):
@@ -10,12 +11,12 @@ class TradingStrategy(Strategy):
         self.data_list = []  # No additional data sources needed for this strategy
 
     @property
-    def assets(self):
-        return self.tickers
-
-    @property
     def interval(self):
         return "1day"  # Daily data for monthly rebalancing
+
+    @property
+    def assets(self):
+        return self.tickers
 
     @property
     def data(self):
@@ -24,61 +25,73 @@ class TradingStrategy(Strategy):
     def run(self, data):
         # Access OHLCV data
         ohlcv = data["ohlcv"]
-        if not ohlcv or len(ohlcv) < 200:  # Ensure sufficient data (200 days for 50/200 MA)
+        if len(ohlcv) < 200:  # Ensure sufficient data for 200-day MA
             log("Insufficient data for strategy execution")
             return TargetAllocation({ticker: 0 for ticker in self.tickers})
 
         allocation_dict = {}
-        total_weight = 0
+        momentum_scores = {}
+        volatilities = {}
 
-        # Calculate metrics for each ticker
+        # Calculate momentum score and volatility for each asset
         for ticker in self.tickers:
-            # Extract closing prices and volatility
-            closes = [day[ticker]["close"] for day in ohlcv if ticker in day]
+            closes = [entry[ticker]["close"] for entry in ohlcv]
             if len(closes) < 200:
-                allocation_dict[ticker] = 0
+                momentum_scores[ticker] = 0
+                volatilities[ticker] = 1
                 continue
 
-            # Momentum Score (MS) = (3-month + 6-month return) / volatility
-            three_month_return = (closes[-1] / closes[-63] - 1) if len(closes) >= 63 else 0  # ~3 months (63 trading days)
-            six_month_return = (closes[-1] / closes[-126] - 1) if len(closes) >= 126 else 0  # ~6 months (126 trading days)
-            volatility = STDEV(ticker, ohlcv, 20)[-1] / closes[-1] if STDEV(ticker, ohlcv, 20) else 0.01  # Avoid division by zero
-            momentum_score = (three_month_return + six_month_return) / max(volatility, 0.01)
+            # Momentum Score: (3-month + 6-month return) / volatility
+            three_month_return = (closes[-1] / closes[-63] - 1) if len(closes) >= 63 else 0  # Approx 3 months
+            six_month_return = (closes[-1] / closes[-126] - 1) if len(closes) >= 126 else 0  # Approx 6 months
+            volatility = STDEV(ticker, ohlcv, 20)[-1] / closes[-1] if STDEV(ticker, ohlcv, 20) else 1  # 20-day std dev
+            momentum_scores[ticker] = (three_month_return + six_month_return) / max(volatility, 0.01)  # Avoid division by zero
+            volatilities[ticker] = volatility
 
-            # Initial weight based on inverse volatility (Wi = 1 / σi)
-            weight = 1 / max(volatility, 0.01)
-
-            # Adjust weight based on momentum score
-            if momentum_score < 0:
-                weight *= 0.5  # Reduce exposure by 50% if MS < 0
-
-            # Profit-Taking Rule
-            one_month_return = (closes[-1] / closes[-21] - 1) if len(closes) >= 21 else 0  # ~1 month (21 trading days)
+            # Apply profit-taking rule
+            one_month_return = (closes[-1] / closes[-21] - 1) if len(closes) >= 21 else 0  # Approx 1 month
             rsi = RSI(ticker, ohlcv, 14)[-1] if RSI(ticker, ohlcv, 14) else 50
-            if (ticker in ["TSLA", "NVDA"] and one_month_return > 0.3) or rsi > 80:
-                weight *= 0.8  # Take 20% profit by reducing weight
+            if one_month_return > 0.3 or rsi > 80:
+                log(f"Profit-taking triggered for {ticker}: Return={one_month_return:.2%}, RSI={rsi:.2f}")
+                momentum_scores[ticker] *= 0.85  # Reduce exposure by 15% (trim position)
 
-            # Stop-Loss Rule
-            peak_price = max(closes)
-            price_drop = (peak_price - closes[-1]) / peak_price
+            # Apply stop-loss rule
+            peak_price = max(closes[-63:])  # Last 3 months peak
+            drop_from_peak = (peak_price - closes[-1]) / peak_price
             sma_50 = SMA(ticker, ohlcv, 50)[-1] if SMA(ticker, ohlcv, 50) else closes[-1]
             sma_200 = SMA(ticker, ohlcv, 200)[-1] if SMA(ticker, ohlcv, 200) else closes[-1]
-            if price_drop >= 0.12 or (sma_50 < sma_200 and sma_50 != closes[-1]):
-                weight *= 0.5  # Reduce exposure by 50% or remove temporarily
+            if drop_from_peak > 0.12 or sma_50 < sma_200:
+                log(f"Stop-loss triggered for {ticker}: Drop={drop_from_peak:.2%}, SMA50={sma_50:.2f}, SMA200={sma_200:.2f}")
+                momentum_scores[ticker] = 0  # Temporarily remove stock
 
-            # Cap weight to avoid over-allocation
-            allocation_dict[ticker] = max(0, min(weight, 1))  # Ensure weight is between 0 and 1
-            total_weight += allocation_dict[ticker]
+        # Adjust exposure based on momentum score
+        for ticker in self.tickers:
+            ms = momentum_scores[ticker]
+            if ms < 0:
+                momentum_scores[ticker] *= 0.5  # Reduce exposure by 50% if negative momentum
 
-        # Normalize weights to sum between 0 and 1
-        if total_weight > 0:
-            for ticker in allocation_dict:
-                allocation_dict[ticker] /= total_weight / 1.0  # Normalize to sum to 1
-                allocation_dict[ticker] = round(allocation_dict[ticker], 4)  # Precision for clarity
+        # Risk-based weighting: Wi = 1 / volatility
+        total_inverse_vol = sum(1 / max(volatilities[ticker], 0.01) for ticker in self.tickers if momentum_scores[ticker] > 0)
+        if total_inverse_vol == 0:
+            log("No valid allocations; all momentum scores are zero or negative")
+            return TargetAllocation({ticker: 0 for ticker in self.tickers})
+
+        # Calculate initial weights based on momentum and volatility
+        for ticker in self.tickers:
+            if momentum_scores[ticker] > 0:
+                weight = (1 / max(volatilities[ticker], 0.01)) / total_inverse_vol
+                allocation_dict[ticker] = weight * min(1, momentum_scores[ticker] / max(momentum_scores.values()))  # Scale by momentum
+            else:
+                allocation_dict[ticker] = 0
+
+        # Normalize allocations to sum between 0 and 1
+        total_allocation = sum(allocation_dict.values())
+        if total_allocation > 0:
+            for ticker in self.tickers:
+                allocation_dict[ticker] /= total_allocation
+                allocation_dict[ticker] = min(max(allocation_dict[ticker], 0), 1)  # Ensure bounds
+                log(f"{ticker}: Momentum Score={momentum_scores[ticker]:.2f}, Volatility={volatilities[ticker]:.2f}, Weight={allocation_dict[ticker]:.2%}")
         else:
-            # If no valid allocations, set all to 0
             allocation_dict = {ticker: 0 for ticker in self.tickers}
 
-        # Log the allocations for debugging
-        log(f"Allocations: {allocation_dict}")
         return TargetAllocation(allocation_dict)
