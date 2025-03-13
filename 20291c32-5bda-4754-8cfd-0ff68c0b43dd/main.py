@@ -23,27 +23,27 @@ class TradingStrategy(Strategy):
         allocation_dict = {"TECL": 0}
 
         # Calculate the RSI for TECL
-        rsi_values = RSI("TECL", data["ohlcv"], length=14)  # Default length for RSI is 14 days
+        rsi_values = RSI("TECL", data["ohlcv"], length=10)  # Default length for RSI is 14 days
 
         # Check if we have enough data to compute the RSI
         if rsi_values and len(rsi_values) > 0:
             current_rsi = rsi_values[-1]  # Get the most recent RSI value
 
-            log(f"Current RSI value for TECL: {current_rsi}")
+            #log(f"Current RSI value for TECL: {current_rsi}")
 
             # Buy (take a long position) if RSI is below 30 (oversold)
-            if current_rsi < 30:
+            if current_rsi < 25:
                 allocation_dict["TECL"] = 1  # Set allocation to 100%
-                log("RSI is oversold. Going long on TECL.")
+                #log("RSI is oversold. Going long on TECL.")
             # Sell (take no position) if RSI is above 70 (overbought)
-            elif current_rsi > 70:
+            elif current_rsi > 80:
                 allocation_dict["TECL"] = 0  # Hold no position
-                log("RSI is overbought. Exiting position in TECL.")
+                #log("RSI is overbought. Exiting position in TECL.")
             else:
                 # For RSI values between 30 and 70, hold the current position
                 # This example assumes exiting the position, equivalent to 'allocation_dict["TECL"] = 0'
                 # Adjust according to your strategy (e.g., maintain previous position)
-                log("RSI is neutral. Holding current position.")
+                #log("RSI is neutral. Holding current position.")
         else:
             log("Not enough data to calculate RSI.")
 
