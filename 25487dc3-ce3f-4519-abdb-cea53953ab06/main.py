@@ -56,7 +56,7 @@ class TradingStrategy(Strategy):
                     if len(self.allocation) < 1:
                         allocation_dict[ticker] = 0
                     else:
-                        allocation_dict[ticker] = self.allocation
+                        allocation_dict[ticker] = self.allocation[ticker]
         self.allocation = allocation_dict
 
         # Return the target allocation for each asset.
