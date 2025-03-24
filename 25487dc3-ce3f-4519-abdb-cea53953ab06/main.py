@@ -27,8 +27,8 @@ class TradingStrategy(Strategy):
 
     def run(self, data):
         # Choose RSI thresholds for buying and selling.
-        lower_threshold = 35
-        upper_threshold = 85
+        lower_threshold = 30
+        upper_threshold = 75
         
         # Initialize allocation dictionary.
         allocation_dict = {}
@@ -53,10 +53,7 @@ class TradingStrategy(Strategy):
                     allocation_dict[ticker] = 0
                 else:
                     # If RSI indicates the asset is neither overbought nor oversold, maintain a neutral stance.
-                    if len(self.allocation) < 1:
-                        allocation_dict[ticker] = 0
-                    else:
-                        allocation_dict[ticker] = self.allocation[ticker]
+                    allocation_dict[ticker] = self.allocation[ticker]
         self.allocation = allocation_dict
 
         # Return the target allocation for each asset.
