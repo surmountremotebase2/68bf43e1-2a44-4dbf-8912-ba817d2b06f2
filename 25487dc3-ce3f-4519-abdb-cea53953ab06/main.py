@@ -1,5 +1,8 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import RSI
+from surmount.technical_indicators import RSI, SMA, STDEV
+from surmount.logging import log
+import pandas as pd
+import numpy as np
 
 class RSITradingStrategy(Strategy):
     def __init__(self):
