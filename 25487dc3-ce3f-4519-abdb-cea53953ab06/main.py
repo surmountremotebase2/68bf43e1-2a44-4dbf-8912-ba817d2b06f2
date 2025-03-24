@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
         
         # Initialize allocation dictionary.
         allocation_dict = {}
-        OHLCV = data["ohlcv"]
+        ohlcv = data["ohlcv"]
         
         # Calculating RSI for each asset.
         for ticker in self.tickers:
