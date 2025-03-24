@@ -33,6 +33,7 @@ class TradingStrategy(Strategy):
         # Initialize allocation dictionary.
         allocation_dict = {}
         
+        
         # Calculating RSI for each asset.
         for ticker in self.tickers:
             rsi_values = RSI(ticker, data["ohlcv"], 10)  # Use a 14-day period for RSI calculation.
