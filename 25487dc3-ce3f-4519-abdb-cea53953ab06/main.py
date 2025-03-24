@@ -4,7 +4,7 @@ from surmount.logging import log
 import pandas as pd
 import numpy as np
 
-class RSITradingStrategy(Strategy):
+class TradingStrategy(Strategy):
     def __init__(self):
         # Define the assets the strategy will cover.
         self.tickers = ["SPY"]
