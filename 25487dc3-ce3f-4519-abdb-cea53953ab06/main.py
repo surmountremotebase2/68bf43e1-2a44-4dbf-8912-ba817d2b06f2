@@ -53,7 +53,10 @@ class TradingStrategy(Strategy):
                     allocation_dict[ticker] = 0
                 else:
                     # If RSI indicates the asset is neither overbought nor oversold, maintain a neutral stance.
-                    allocation_dict[ticker] = self.allocation
+                    if len(self.allocation) < 1:
+                        allocation_dict[ticker] = 0
+                    else:
+                        allocation_dict[ticker] = self.allocation
         self.allocation = allocation_dict
 
         # Return the target allocation for each asset.
