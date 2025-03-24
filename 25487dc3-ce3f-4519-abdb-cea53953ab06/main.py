@@ -47,7 +47,7 @@ class TradingStrategy(Strategy):
                 # Decide on allocation based on RSI.
                 if current_rsi < lower_threshold:
                     # If RSI indicates the asset is oversold, allocate a higher percentage to buying it.
-                    allocation_dict[ticker] = 1.0 / len(self.tickers)
+                    allocation_dict[ticker] = 1.0
                 elif current_rsi > upper_threshold:
                     # If RSI indicates the asset is overbought, allocate zero to buying it.
                     allocation_dict[ticker] = 0
