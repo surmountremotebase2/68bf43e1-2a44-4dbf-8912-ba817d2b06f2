@@ -37,7 +37,7 @@ class TradingStrategy(Strategy):
         # Calculating RSI for each asset.
         for ticker in self.tickers:
             rsi_values = RSI(ticker, data["ohlcv"], 10)  # Use a 14-day period for RSI calculation.
-            sma = SMA(ticker, data["ohlcv"], 50)
+            sma = SMA(ticker, data["ohlcv"], 200)
             if not rsi_values or len(rsi_values) < 1:
                 # If RSI values are unavailable or insufficient, do not allocate.
                 allocation_dict[ticker] = 0
