@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
         
         # Initialize allocation dictionary.
         allocation_dict = {}
-        
+        OHLCV = data["ohlcv"]
         
         # Calculating RSI for each asset.
         for ticker in self.tickers:
@@ -50,7 +50,7 @@ class TradingStrategy(Strategy):
                 if current_rsi < lower_threshold:
                     # If RSI indicates the asset is oversold, allocate a higher percentage to buying it.
                     allocation_dict[ticker] = 1.0
-                elif data["ohlcv"][ticker]["close"][-1] < current_sma:
+                elif ohlcv[-1][ticker]['close'] < current_sma:
                     # If RSI indicates the asset is overbought, allocate zero to buying it.
                     allocation_dict[ticker] = 0
                 else:
