@@ -28,7 +28,7 @@ class TradingStrategy(Strategy):
     def run(self, data):
         # Choose RSI thresholds for buying and selling.
         lower_threshold = 30
-        upper_threshold = 75
+        upper_threshold = 85
         
         # Initialize allocation dictionary.
         allocation_dict = {}
@@ -37,18 +37,20 @@ class TradingStrategy(Strategy):
         # Calculating RSI for each asset.
         for ticker in self.tickers:
             rsi_values = RSI(ticker, data["ohlcv"], 10)  # Use a 14-day period for RSI calculation.
+            sma = SMA(ticker, data["ohlcv"], 50)
             if not rsi_values or len(rsi_values) < 1:
                 # If RSI values are unavailable or insufficient, do not allocate.
                 allocation_dict[ticker] = 0
             else:
                 # Get the most recent RSI value.
                 current_rsi = rsi_values[-1]
+                current_sma = sma[-1]
                 
                 # Decide on allocation based on RSI.
                 if current_rsi < lower_threshold:
                     # If RSI indicates the asset is oversold, allocate a higher percentage to buying it.
                     allocation_dict[ticker] = 1.0
-                elif current_rsi > upper_threshold:
+                elif data["ohlcv"][ticker]["close"][-1] < current_sma:
                     # If RSI indicates the asset is overbought, allocate zero to buying it.
                     allocation_dict[ticker] = 0
                 else:
