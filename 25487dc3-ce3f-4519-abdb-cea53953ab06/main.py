@@ -8,6 +8,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Define the assets the strategy will cover.
         self.tickers = ["SPY"]
+        self.allocation = {}
         
     @property
     def interval(self):
@@ -51,8 +52,9 @@ class TradingStrategy(Strategy):
                     allocation_dict[ticker] = 0
                 else:
                     # If RSI indicates the asset is neither overbought nor oversold, maintain a neutral stance.
-                    allocation_dict[ticker] = 0.8 / len(self.tickers)
-        
+                    allocation_dict[ticker] = self.allocation
+        self.allocation = allocation_dict
+
         # Return the target allocation for each asset.
         return TargetAllocation(allocation_dict)
 
