@@ -5,16 +5,15 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         self.assets = ["QQQ"]
-        self.interval = "1day"
         self.stop_loss_percentage = -0.06  # 6% stop loss
 
     @property
     def assets(self):
-        return self.assets
+        return ["QQQ"]
 
     @property
     def interval(self):
-        return self.interval
+        return "1day"
 
     @property
     def data(self):
