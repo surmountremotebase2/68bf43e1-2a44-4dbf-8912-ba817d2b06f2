@@ -1,37 +1,52 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.data import ohlcv
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class TradingStrategy(Strategy):
+
     def __init__(self):
-        # Define which ticker we're interested in trading
-        self.tickers = ["QQQ"]
-    
+        self.assets = ["QQQ"]
+        self.interval = "1day"
+        self.stop_loss_percentage = -0.06  # 6% stop loss
+
     @property
     def assets(self):
-        # The assets that the strategy trades
-        return self.tickers
-    
+        return self.assets
+
     @property
     def interval(self):
-        # Define the interval for data refresh, 1day for daily checks
-        return "1day"
-    
+        return self.interval
+
+    @property
+    def data(self):
+        return []
+
     def run(self, data):
-        # Initialize the allocation for QQQ to 0
-        allocation = {"QQQ": 0}
+        # Initial allocation is nothing
+        allocation_dict = {"QQQ": 0.0}  
+
+        # Ensure there is enough data to consider
+        if len(data["ohlcv"]) < 2:
+            return TargetAllocation(allocation_dict)
+
+        # Retrieve the last two days of trading data for QQQ
+        last_day_data = data["ohlcv"][-1]["QQQ"]
+        previous_day_data = data["ohlcv"][-2]["QQQ"]
         
-        # Check if we have OHLCV data for QQQ
-        if "QQQ" in data["ohlcv"]:
-            # Get today's datetime object
-            today = datetime.now()
-            # If today is Monday, we buy QQQ at market close, so we set the allocation to 1
-            if today.weekday() == 0:  # Python's datetime.weekday() returns 0 for Monday
-                allocation["QQQ"] = 1
-            # If today is Wednesday and it's market open, we sell QQQ by setting allocation to 0
-            # Since we are using "1day" interval data, we don't have the exact opening time.
-            # We assume this strategy is evaluated right at or just before the open.
-            elif today.weekday() == 2:  # Wednesday
-                allocation["QQQ"] = 0
-                
-        return TargetAllocation(allocation)
+        # Parse the last trading day date
+        last_trading_day_date = datetime.strptime(last_day_data["date"], "%Y-%m-%d %H:%M:%S")
+
+        # Calculate the percentage change between open and close
+        percentage_change = (last_day_data["close"] - last_day_data["open"]) / last_day_data["open"]
+        
+        # Calculate stop loss condition
+        stop_loss_triggered = (last_day_data["low"] / previous_day_data["close"] <= self.stop_loss_percentage)
+
+        # Buying condition: It's Monday and the close is less than 1% up compared to the open
+        if last_trading_day_date.weekday() == 0 and percentage_change <= 0.01:
+            allocation_dict = {"QQQ": 1.0}
+
+        # Selling condition: It's Thursday 1 hour before market close or stop loss is triggered
+        elif last_trading_day_date.weekday() == 3 or stop_loss_triggered:
+            allocation_dict = {"QQQ": 0.0}
+
+        return TargetAllocation(allocation_dict)
