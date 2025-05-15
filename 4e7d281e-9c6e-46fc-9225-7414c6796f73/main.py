@@ -16,7 +16,7 @@ class TradingStrategy(Strategy):
             MedianCPI(),
             StickyPriceConsumerPriceIndex()
         ]
-        self.tickers = ["SPY"]  # Will be populated dynamically
+        self.tickers = []  # Will be populated dynamically
 
     @property
     def interval(self):
@@ -112,4 +112,5 @@ class TradingStrategy(Strategy):
         print(f"Final allocations: {allocation_dict}")
         print(f"MedianCPI change: {median_cpi_change if len(median_cpi) > 1 else 'N/A'}")
         print(f"Inflation score: {inflation_score}")
+    
         return TargetAllocation(allocation_dict)
