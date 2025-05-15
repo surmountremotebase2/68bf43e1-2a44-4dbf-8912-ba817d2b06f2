@@ -2,8 +2,7 @@ from surmount.base_class import Strategy, TargetAllocation
 from surmount.data import (
     TopActiveStocks, TopCongressTraders, TopGovernmentContracts,
     TopLobbyingContracts, MedianCPI,
-    StickyPriceConsumerPriceIndex
-)
+    StickyPriceConsumerPriceIndex)
 from surmount.logging import log
 
 class TradingStrategy(Strategy):
