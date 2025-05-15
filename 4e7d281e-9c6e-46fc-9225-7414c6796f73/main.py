@@ -114,12 +114,3 @@ class TradingStrategy(Strategy):
         print(f"MedianCPI change: {median_cpi_change if len(median_cpi) > 1 else 'N/A'}")
         print(f"Inflation score: {inflation_score}")
         return TargetAllocation(allocation_dict)
-
-
-from datetime import datetime
-
-start = datetime.strptime("2020-10-16", '%Y-%m-%d')
-end = datetime.strptime("2023-11-16", '%Y-%m-%d')
-results = backtest(TradingStrategy(), start, end, fees=0.1, initial_capital=1000)
-
-print(results['stats'])
