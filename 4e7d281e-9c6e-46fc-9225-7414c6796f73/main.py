@@ -1,4 +1,4 @@
-from surmount.base_class import Strategy, TargetAllocation, backtest
+from surmount.base_class import Strategy, TargetAllocation
 from surmount.data import (
     TopActiveStocks, TopCongressTraders, TopGovernmentContracts,
     TopLobbyingContracts, MedianCPI,
@@ -17,7 +17,7 @@ class TradingStrategy(Strategy):
             MedianCPI(),
             StickyPriceConsumerPriceIndex()
         ]
-        self.tickers = ["SPY"]  # Will be populated dynamically
+        self.tickers = []  # Will be populated dynamically
 
     @property
     def interval(self):
