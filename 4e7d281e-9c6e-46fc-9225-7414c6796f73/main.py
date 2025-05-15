@@ -17,7 +17,7 @@ class TradingStrategy(Strategy):
             MedianCPI(),
             StickyPriceConsumerPriceIndex()
         ]
-        self.tickers = ["AAPL"]  # Will be populated dynamically
+        self.tickers = ["SPY"]  # Will be populated dynamically
 
     @property
     def interval(self):
