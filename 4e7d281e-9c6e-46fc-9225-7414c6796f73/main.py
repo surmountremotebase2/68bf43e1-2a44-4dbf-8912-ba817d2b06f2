@@ -36,6 +36,7 @@ class TradingStrategy(Strategy):
         # Get top active stocks
         active_stocks = data[("top_active_stocks",)]    
         tickers = [stock["ticker"] for stock in active_stocks]
+        print(f"TICKERS: {tickers}")
              
         # Get latest data points
         gov_contracts = data[("top_government_contracts",)]
