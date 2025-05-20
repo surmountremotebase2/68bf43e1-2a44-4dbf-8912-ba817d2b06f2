@@ -17,6 +17,7 @@ class TradingStrategy(Strategy):
             StickyPriceConsumerPriceIndex()
         ]
         self.tickers = []  # Will be populated dynamically
+        self.count = 0
 
     @property
     def interval(self):
@@ -36,7 +37,9 @@ class TradingStrategy(Strategy):
         # Get top active stocks
         active_stocks = data[("top_active_stocks",)]    
         tickers = [stock["ticker"] for stock in active_stocks]
-        log(f"TICKERS: {tickers}")
+        if self.count == 0:
+            log(f"TICKERS: {tickers}")
+            self.count =+ 1
              
         # Get latest data points
         gov_contracts = data[("top_government_contracts",)]
