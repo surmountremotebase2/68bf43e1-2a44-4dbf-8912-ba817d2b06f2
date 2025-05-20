@@ -43,6 +43,8 @@ class TradingStrategy(Strategy):
         lobbying_contracts = data[("top_lobbying_contracts",)]
         median_cpi = data[("median_cpi",)]
         sticky_cpi = data[("sticky_price_consumer_price_index",)]
+        todaycpi = median_cpi[-1]["value"]
+        log(f"CPI: {todaycpi}")
 
         contract_tickers = set()
         if gov_contracts and len(gov_contracts) > 0:
