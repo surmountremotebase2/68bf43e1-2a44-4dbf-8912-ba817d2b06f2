@@ -34,7 +34,7 @@ class TradingStrategy(Strategy):
 
         latest_cpi = median_cpi_data[-1]["value"]
         high_inflation = latest_cpi > 5
-        log(f"Latest CPI: {latest_cpi} | High Inflation: {high_inflation}")
+        #log(f"Latest CPI: {latest_cpi} | High Inflation: {high_inflation}")
 
         for ticker in self.tickers:
             # Extract recent close prices
