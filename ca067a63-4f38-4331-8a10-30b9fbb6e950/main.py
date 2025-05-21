@@ -40,7 +40,7 @@ class TradingStrategy(Strategy):
             # Extract recent close prices
             close_prices = [bar[ticker]["close"] for bar in ohlcv if ticker in bar]
             if len(close_prices) < 60:
-                log(f"Not enough price data for {ticker}")
+                #log(f"Not enough price data for {ticker}")
                 continue
 
             current = close_prices[-1]
@@ -50,7 +50,7 @@ class TradingStrategy(Strategy):
             month_change = (current - month_ago) / month_ago
             quarter_change = (current - quarter_ago) / quarter_ago
 
-            log(f"{ticker} | Month: {month_change:.2%} | Quarter: {quarter_change:.2%}")
+            #log(f"{ticker} | Month: {month_change:.2%} | Quarter: {quarter_change:.2%}")
 
             # Profit-taking rule for GLD
             if ticker == "GLD" and quarter_change > 0.15:
