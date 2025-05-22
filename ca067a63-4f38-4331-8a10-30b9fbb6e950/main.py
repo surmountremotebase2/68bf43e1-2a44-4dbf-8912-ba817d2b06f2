@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
         for ticker in self.tickers:
             # Extract recent close prices
             close_prices = [bar[ticker]["close"] for bar in ohlcv if ticker in bar]
-            if len(close_prices) < 60:
+            if len(close_prices) < 1:
                 #log(f"Not enough price data for {ticker}")
                 continue
 
