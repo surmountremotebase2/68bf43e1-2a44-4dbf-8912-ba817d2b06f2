@@ -22,7 +22,7 @@ class TradingStrategy(Strategy):
 
     def run(self, data):
         allocation = {ticker: 0 for ticker in self.tickers}
-        weights = {ticker: 1 for ticker in self.tickers}
+        weights = {ticker: 0.2 for ticker in self.tickers}
         ohlcv = data["ohlcv"]
 
         # Get CPI value from proper data source
