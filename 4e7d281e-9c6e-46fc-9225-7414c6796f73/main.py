@@ -47,8 +47,9 @@ class TradingStrategy(Strategy):
         median_cpi = data[("median_cpi",)]
         sticky_cpi = data[("sticky_price_consumer_price_index",)]
         todaycpi = median_cpi[-1]["value"]
+        todaysticky = sticky_cpi[-1]["value"]
         log(f"CPI: {todaycpi}")
-        log(f"STICKY: {sticky_cpi}")
+        log(f"STICKY: {todaysticky}")
 
         contract_tickers = set()
         if gov_contracts and len(gov_contracts) > 0:
