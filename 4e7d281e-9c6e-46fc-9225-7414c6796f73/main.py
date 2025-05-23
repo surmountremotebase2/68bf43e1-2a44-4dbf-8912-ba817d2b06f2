@@ -54,14 +54,16 @@ class TradingStrategy(Strategy):
         contract_tickers = set()
         if gov_contracts and len(gov_contracts) > 0:
             contracts_top_20 = gov_contracts
-            log(f"CONTRACTS TOP20: {contracts_top_20}")
+            if self.count < 2:
+                log(f"CONTRACTS TOP20: {contracts_top_20}")
             contract_tickers = {contract["ticker"] for contract in contracts_top_20 
                               if contract["ticker"] in tickers and contract["amount"] > 1000000}  # $1M threshold
 
         lobbying_tickers = set()
         if lobbying_contracts and len(lobbying_contracts) > 0:
             lobbying_top_20 = lobbying_contracts
-            log(f"LOBBY TOP20: {lobbying_top_20}")
+            if self.count < 2:
+                log(f"LOBBY TOP20: {lobbying_top_20}")
             lobbying_tickers = {contract["ticker"] for contract in lobbying_top_20 
                               if contract["ticker"] in tickers and contract["amount"] > 1000000}  # $1M threshold
 
