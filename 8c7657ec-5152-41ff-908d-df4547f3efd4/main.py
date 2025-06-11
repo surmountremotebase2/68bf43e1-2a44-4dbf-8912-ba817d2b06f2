@@ -6,7 +6,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         self.data_list = [TopGovernmentContracts(), TopLobbyingContracts()]
-        self.contract_cache = {}  # Remember price at award date
+        self.contract_cache = {}
         self.tickers = []
 
     @property
@@ -28,6 +28,7 @@ class TradingStrategy(Strategy):
         ohlcv_data = data.get("ohlcv", [])
 
         if not ohlcv_data:
+            log("No OHLCV data available.")
             return TargetAllocation({})
 
         current_prices = ohlcv_data[-1]
@@ -35,18 +36,17 @@ class TradingStrategy(Strategy):
         total_lobbying = 0
         contract_awards = set()
 
-        # Parse lobbying data
         for entry in lobbying_data:
             ticker = entry["ticker"]
             amount = entry["amount"]
             lobbying_spend[ticker] = amount
             total_lobbying += amount
 
-        # Track awarded contracts and award prices
         for contract in gov_contracts:
             ticker = contract["ticker"]
             if ticker not in current_prices:
-                continue  # Ignore if no price data
+                log(f"Skipping {ticker} — no price data for contract award.")
+                continue
             price = current_prices[ticker]["close"]
             contract_awards.add(ticker)
             if ticker not in self.contract_cache:
@@ -55,15 +55,14 @@ class TradingStrategy(Strategy):
                     "award_date": current_prices[ticker]["date"]
                 }
 
-        # Update tickers list
         self.tickers = list(set(lobbying_spend.keys()).union(contract_awards))
-        log(str(self.tickers))
         raw_scores = {}
         total_score = 0
 
         for ticker in self.tickers:
             if ticker not in current_prices:
-                continue  # Don't allocate if we don't have OHLCV data
+                log(f"Skipping {ticker} — no current price data.")
+                continue
 
             score = 0
             if ticker in contract_awards:
@@ -73,21 +72,25 @@ class TradingStrategy(Strategy):
                 lobbying_weight = lobbying_spend[ticker] / total_lobbying
                 score += 0.5 * lobbying_weight
 
-            # Profit-taking check
+            # Check profit-taking condition
             if ticker in self.contract_cache:
                 award_price = self.contract_cache[ticker]["award_price"]
                 current_price = current_prices[ticker]["close"]
                 change = (current_price - award_price) / award_price
                 if change >= 0.5:
-                    log(f"Trimming {ticker} - profit exceeded 50% since contract award")
-                    continue  # Skip allocating
+                    log(f"{ticker} up {change*100:.2f}% — profit taken.")
+                    continue
 
+            log(f"{ticker}: score = {score:.4f}")
             raw_scores[ticker] = score
             total_score += score
 
-        # Normalize allocation
         if total_score > 0:
             for ticker, score in raw_scores.items():
-                allocation_dict[ticker] = score / total_score
+                allocation = score / total_score
+                log(f"Allocating {ticker}: {allocation:.4f}")
+                allocation_dict[ticker] = allocation
+        else:
+            log("No valid allocations — total score is zero.")
 
         return TargetAllocation(allocation_dict)
