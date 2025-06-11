@@ -60,7 +60,7 @@ class TradingStrategy(Strategy):
 
         for ticker in self.tickers:
             if ticker not in current_prices:
-                log(f"Missing price for {ticker}, skipping.")
+                #log(f"Missing price for {ticker}, skipping.")
                 continue
 
             score = 0.5 if ticker in contract_awards else 0
