@@ -57,6 +57,7 @@ class TradingStrategy(Strategy):
 
         # Update tickers list
         self.tickers = list(set(lobbying_spend.keys()).union(contract_awards))
+        log(self.tickers)
         raw_scores = {}
         total_score = 0
 
