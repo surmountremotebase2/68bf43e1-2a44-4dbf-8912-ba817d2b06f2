@@ -7,7 +7,16 @@ class TradingStrategy(Strategy):
     def __init__(self):
         self.data_list = [TopGovernmentContracts(), TopLobbyingContracts()]
         self.contract_cache = {}
-        self.tickers = []
+        self.tickers = ["MSFT", "NVDA", "AAPL", "AMZN", "GOOGL", "META", "AVGO", "BRK.B", "TSLA", "TSM",
+                        "WMT", "JPM", "LLY", "V", "MA", "NFLX", "ORCL", "XOM", "COST", "PG",
+                        "JNJ", "HD", "NVO", "SAP", "ABBV", "BAC", "PLTR", "ASML", "KO", "PM",
+                        "UNH", "BABA", "TMUS", "GE", "IBM", "CRM", "CSCO", "CVX", "WFC", "TM",
+                        "ABT", "NVS", "AZN", "LIN", "MCD", "DIS", "INTU", "MS", "AXP", "NOW",
+                        "PEP", "PFE", "AMD", "ADBE", "TXN", "INTC", "UNP", "LMT", "UPS", "BP",
+                        "SCHW", "RTX", "GS", "BLK", "CAT", "HON", "SBUX", "MDT", "PYPL", "BKNG",
+                        "BK", "EL", "DHR", "TGT", "BA", "VZ", "CMCSA", "GSK", "SNY", "MO",
+                        "TJX", "CI", "BMY", "LOW", "F", "SPGI", "MMM", "MDLZ", "DE", "COP",
+                        "GILD", "AON", "BDX", "ISRG", "RIO", "NEE", "CSX", "PGR", "AMT", "HCA" ]
 
     @property
     def interval(self):
