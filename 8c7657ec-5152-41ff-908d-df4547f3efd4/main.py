@@ -76,7 +76,7 @@ class TradingStrategy(Strategy):
 
                 # Profit-taking rule
                 if returns >= 0.5:
-                    log(f"{ticker} return {returns:.2%} — skipping (profit rule)")
+                    #log(f"{ticker} return {returns:.2%} — skipping (profit rule)")
                     continue
 
                 score = 0.0
