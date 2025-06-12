@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
 
         allocation = {ticker: 0 for ticker in self.tickers}
 
-        if len(ohlcv) < 126:
+        if len(ohlcv) < 1:
             log("Not enough OHLCV data — fallback to equal allocation.")
             weight = 1.0 / len(self.tickers)
             return TargetAllocation({ticker: weight for ticker in self.tickers})
