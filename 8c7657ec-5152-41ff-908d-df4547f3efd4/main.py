@@ -1,22 +1,24 @@
 from surmount.base_class import Strategy, TargetAllocation
 from surmount.data import TopGovernmentContracts, TopLobbyingContracts
+from surmount.technical_indicators import STDEV
 from surmount.logging import log
 
 class TradingStrategy(Strategy):
 
     def __init__(self):
         self.data_list = [TopGovernmentContracts(), TopLobbyingContracts()]
-        self.contract_cache = {}
-        self.tickers = ["MSFT", "NVDA", "AAPL", "AMZN", "GOOGL", "META", "AVGO", "BRK.B", "TSLA", "TSM",
-                        "WMT", "JPM", "LLY", "V", "MA", "NFLX", "ORCL", "XOM", "COST", "PG",
-                        "JNJ", "HD", "NVO", "SAP", "ABBV", "BAC", "PLTR", "ASML", "KO", "PM",
-                        "UNH", "BABA", "TMUS", "GE", "IBM", "CRM", "CSCO", "CVX", "WFC", "TM",
-                        "ABT", "NVS", "AZN", "LIN", "MCD", "DIS", "INTU", "MS", "AXP", "NOW",
-                        "PEP", "PFE", "AMD", "ADBE", "TXN", "INTC", "UNP", "LMT", "UPS", "BP",
-                        "SCHW", "RTX", "GS", "BLK", "CAT", "HON", "SBUX", "MDT", "PYPL", "BKNG",
-                        "BK", "EL", "DHR", "TGT", "BA", "VZ", "CMCSA", "GSK", "SNY", "MO",
-                        "TJX", "CI", "BMY", "LOW", "F", "SPGI", "MMM", "MDLZ", "DE", "COP",
-                        "GILD", "AON", "BDX", "ISRG", "RIO", "NEE", "CSX", "PGR", "AMT", "HCA" ]
+        self.tickers = [
+            "MSFT", "NVDA", "AAPL", "AMZN", "GOOGL", "META", "AVGO", "BRK.B", "TSLA", "TSM",
+            "WMT", "JPM", "LLY", "V", "MA", "NFLX", "ORCL", "XOM", "COST", "PG",
+            "JNJ", "HD", "NVO", "SAP", "ABBV", "BAC", "PLTR", "ASML", "KO", "PM",
+            "UNH", "BABA", "TMUS", "GE", "IBM", "CRM", "CSCO", "CVX", "WFC", "TM",
+            "ABT", "NVS", "AZN", "LIN", "MCD", "DIS", "INTU", "MS", "AXP", "NOW",
+            "PEP", "PFE", "AMD", "ADBE", "TXN", "INTC", "UNP", "LMT", "UPS", "BP",
+            "SCHW", "RTX", "GS", "BLK", "CAT", "HON", "SBUX", "MDT", "PYPL", "BKNG",
+            "BK", "EL", "DHR", "TGT", "BA", "VZ", "CMCSA", "GSK", "SNY", "MO",
+            "TJX", "CI", "BMY", "LOW", "F", "SPGI", "MMM", "MDLZ", "DE", "COP",
+            "GILD", "AON", "BDX", "ISRG", "RIO", "NEE", "CSX", "PGR", "AMT", "HCA"
+        ]
 
     @property
     def interval(self):
@@ -31,70 +33,70 @@ class TradingStrategy(Strategy):
         return self.data_list
 
     def run(self, data):
-        allocation_dict = {}
-        gov_contracts = data.get(("top_government_contracts",), [])
-        lobbying_data = data.get(("top_lobbying_contracts",), [])
-        ohlcv_data = data.get("ohlcv", [])
+        ohlcv = data["ohlcv"]
+        gov_contracts = data[("top_government_contracts",)]
+        lobbying_data = data[("top_lobbying_contracts",)]
 
-        if not ohlcv_data:
-            log("No OHLCV data — fallback to equal allocation.")
-            fallback_tickers = list({entry["ticker"] for entry in lobbying_data + gov_contracts})
-            weight = 1.0 / len(fallback_tickers) if fallback_tickers else 0
-            return TargetAllocation({t: weight for t in fallback_tickers})
+        allocation = {ticker: 0 for ticker in self.tickers}
 
-        current_prices = ohlcv_data[-1]
+        if len(ohlcv) < 126:
+            log("Not enough OHLCV data — fallback to equal allocation.")
+            weight = 1.0 / len(self.tickers)
+            return TargetAllocation({ticker: weight for ticker in self.tickers})
+
+        # Build lookup for contract and lobbying
+        contract_awarded = set()
         lobbying_spend = {}
         total_lobbying = 0
-        contract_awards = set()
+
+        for entry in gov_contracts:
+            t = entry["ticker"]
+            if t in self.tickers:
+                contract_awarded.add(t)
 
         for entry in lobbying_data:
-            ticker = entry["ticker"]
-            amount = entry["amount"]
-            lobbying_spend[ticker] = amount
-            total_lobbying += amount
+            t = entry["ticker"]
+            if t in self.tickers:
+                lobbying_spend[t] = entry["amount"]
+                total_lobbying += entry["amount"]
 
-        for contract in gov_contracts:
-            ticker = contract["ticker"]
-            if ticker in current_prices:
-                contract_awards.add(ticker)
-                if ticker not in self.contract_cache:
-                    self.contract_cache[ticker] = {
-                        "award_price": current_prices[ticker]["close"],
-                        "award_date": current_prices[ticker]["date"]
-                    }
-
-        self.tickers = list(set(lobbying_spend.keys()).union(contract_awards))
+        # Score and filter
         raw_scores = {}
         total_score = 0
 
         for ticker in self.tickers:
-            if ticker not in current_prices:
-                #log(f"Missing price for {ticker}, skipping.")
-                continue
-
-            score = 0.5 if ticker in contract_awards else 0
-            if ticker in lobbying_spend and total_lobbying > 0:
-                score += 0.5 * lobbying_spend[ticker] / total_lobbying
-
-            if ticker in self.contract_cache:
-                award_price = self.contract_cache[ticker]["award_price"]
-                current_price = current_prices[ticker]["close"]
-                price_change = (current_price - award_price) / award_price
-                if price_change >= 0.5:
-                    log(f"{ticker} up {price_change*100:.1f}% — skipping due to profit rule.")
+            try:
+                close_prices = [day[ticker]["close"] for day in ohlcv[-126:] if ticker in day]
+                if len(close_prices) < 126:
                     continue
 
-            raw_scores[ticker] = score
-            total_score += score
+                returns = (close_prices[-1] / close_prices[0]) - 1
+                volatility = STDEV(ticker, ohlcv, 126)
+                vol = volatility[-1] if volatility else 1
+
+                # Profit-taking rule
+                if returns >= 0.5:
+                    log(f"{ticker} return {returns:.2%} — skipping (profit rule)")
+                    continue
+
+                score = 0.0
+                if ticker in contract_awarded:
+                    score += 0.5
+                if ticker in lobbying_spend and total_lobbying > 0:
+                    score += 0.5 * lobbying_spend[ticker] / total_lobbying
+
+                raw_scores[ticker] = score
+                total_score += score
+            except:
+                continue  # Skip tickers with missing or invalid data
 
         if total_score > 0:
             for ticker, score in raw_scores.items():
-                allocation_dict[ticker] = score / total_score
+                allocation[ticker] = score / total_score
         else:
-            # No valid tickers with prices — fallback to equal allocation
-            fallback_tickers = list(set(lobbying_spend.keys()).union(contract_awards))
-            log("All tickers filtered out or missing prices — fallback to equal allocation.")
-            weight = 1.0 / len(fallback_tickers) if fallback_tickers else 0
-            allocation_dict = {t: weight for t in fallback_tickers}
+            log("All tickers filtered — fallback to equal weights.")
+            fallback = [t for t in self.tickers if t in raw_scores]
+            weight = 1.0 / len(fallback) if fallback else 0
+            allocation = {t: weight for t in fallback}
 
-        return TargetAllocation(allocation_dict)
+        return TargetAllocation(allocation)
