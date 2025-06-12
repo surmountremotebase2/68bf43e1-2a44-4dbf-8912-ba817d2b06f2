@@ -36,6 +36,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
         gov_contracts = data[("top_government_contracts",)]
         lobbying_data = data[("top_lobbying_contracts",)]
+        mrkt_prices = [day["MSFT"]["close"] for day in ohlcv]
 
         allocation = {ticker: 0 for ticker in self.tickers}
 
