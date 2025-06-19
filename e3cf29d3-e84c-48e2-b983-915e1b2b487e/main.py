@@ -33,12 +33,12 @@ class TradingStrategy(Strategy):
             #log(f"Current RSI value for TECL: {current_rsi}")
 
             # Buy (take a long position) if RSI is below 30 (oversold)
-            if current_rsi < 29:
+            if current_rsi < 30:
                 allocation_dict["TQQQ"] = 1  # Set allocation to 100%
                 self.bull = 1
                 #log("RSI is oversold. Going long on TECL.")
             # Sell (take no position) if RSI is above 70 (overbought)
-            elif current_rsi > 55:
+            elif current_rsi > 45:
                 allocation_dict["TQQQ"] = 0  # Hold no position
                 self.bull = 0
                 #log("RSI is overbought. Exiting position in TECL.")
