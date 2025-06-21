@@ -8,15 +8,15 @@ class TradingStrategy(Strategy):
     DividendIncomeStrategy: A regime-based strategy that switches between a "risk-off"
     and "risk-on" mode.
     
-    - Risk-Off Trigger: If the High-Yield Bond ETF (HYG) closes below its quarterly VWAP,
-      the strategy allocates 100% to BIL (short-term treasuries) to protect capital.
+    - Risk-Off Trigger: If the High-Yield Bond ETF (HYG) closes below its quarterly VWAP.
+    - Risk-Off Action: Allocates 100% to BIL and stays in this position for a fixed
+      number of days (defined by `risk_off_wait_days`) using `self.counter`.
     
-    - Risk-On Allocation: Otherwise, it follows a dynamic allocation model:
-      1.  It determines a pool of "safe" assets based on the current Median CPI reading.
-      2.  It selects the single best safe asset using a long-term momentum score. This
-          asset receives a fixed base allocation (30%).
-      3.  It then selects the top 3 momentum-driven dividend and bond ETFs for the
-          remainder of the portfolio (70%), ensuring a diversified but strong posture.
+    - Risk-On Allocation: When not in a risk-off state, it follows a dynamic model:
+      1.  Determines a pool of "safe" assets based on the current Median CPI reading.
+      2.  Selects the single best safe asset using a momentum score, which receives a
+          fixed base allocation (30%).
+      3.  Allocates the remainder (70%) to the top 3 momentum-driven dividend/bond ETFs.
     """
     def __init__(self):
         # The universe of assets the strategy can trade.
@@ -29,8 +29,8 @@ class TradingStrategy(Strategy):
         self.momentum_assets = ["BND", "TLT", "HYG", "DTH", "VIG", "VYM", "PEY"]
         
         # Parameters for the momentum calculation.
-        self.mom_long = 125  # Long-term lookback period
-        self.mom_short = 15   # Short-term lookback period
+        self.mom_long = 125
+        self.mom_short = 15
         
         # The CPI level that determines the safe asset pool.
         self.inflation_threshold = 2.1
@@ -41,112 +41,121 @@ class TradingStrategy(Strategy):
         # A warm-up period to ensure sufficient data for calculations.
         self.warmup = self.mom_long + 5
 
+        # Counter for the risk-off state duration.
+        self.counter = 0
+        self.risk_off_wait_days = 4
+
     @property
     def interval(self):
-        """
-        The strategy uses daily data.
-        """
         return "1day"
 
     @property
     def assets(self):
-        """
-        The list of assets this strategy trades.
-        """
         return self.tickers
 
     @property
     def data(self):
-        """
-        Requires Median CPI data to assess the inflation environment.
-        """
         return [MedianCPI()]
 
+    def _vwap(self, high, low, close, volume, anchor_period='quarter'):
+        """
+        Calculates the anchored Volume Weighted Average Price (VWAP).
+        This method is adapted to calculate VWAP resetting at the start of each period
+        (e.g., quarter) based on the anchor_period.
+        """
+        # Create a DataFrame for grouping and calculation.
+        df = pd.DataFrame({'high': high, 'low': low, 'close': close, 'volume': volume})
+        df.index = pd.to_datetime(df.index)
+
+        # Map anchor_period to pandas Grouper frequency.
+        freq_map = {'month': 'MS', 'quarter': 'QS', 'year': 'AS'}
+        if anchor_period not in freq_map:
+            raise ValueError("anchor_period must be one of 'month', 'quarter', or 'year'")
+        
+        # Calculate typical price and volume-price product.
+        df['typical_price'] = (df['high'] + df['low'] + df['close']) / 3
+        df['tpv'] = df['typical_price'] * df['volume']
+
+        # Group by the specified anchor period and calculate cumulative values within each group.
+        grouped = df.groupby(pd.Grouper(freq=freq_map[anchor_period]))
+        
+        cumulative_tpv = grouped['tpv'].cumsum()
+        cumulative_volume = grouped['volume'].cumsum()
+        
+        # Calculate VWAP, handling potential division by zero.
+        vwap_series = (cumulative_tpv / cumulative_volume).fillna(method='ffill')
+        
+        return vwap_series
+        
     def _calculate_momentum(self, asset, ohlcv_data):
         """
         Helper function to calculate the momentum score for a single asset.
         Momentum = Long-Term Return - (0.15 * Short-Term Return)
-        This penalizes assets with strong recent pullbacks.
         """
         try:
-            # Extract historical close prices for the asset.
             prices = [d[asset]['close'] for d in ohlcv_data]
-            
-            # Ensure there is enough data for the calculation.
             if len(prices) < self.mom_long:
-                return -999 # Return a very low score if data is insufficient.
-                
-            # Calculate long and short term returns.
+                return -999
             ret_long = prices[-1] / prices[-self.mom_long] - 1
             ret_short = prices[-1] / prices[-self.mom_short] - 1
-            
-            # Calculate the final momentum score.
             momentum_score = ret_long - (ret_short * 0.15)
-            
             return momentum_score if pd.notna(momentum_score) else -999
         except (KeyError, IndexError):
-            # Handle cases where the asset data might be missing for a given day.
             return -999
 
     def run(self, data):
-        # Ensure there's enough historical data to run the strategy.
+        # --- Risk-Off Counter Check ---
+        # If the counter is active, stay in BIL and decrement the counter.
+        if self.counter > 0:
+            self.counter -= 1
+            log(f"Risk-Off period active. Days remaining: {self.counter}")
+            return TargetAllocation({"BIL": 1.0})
+
         if len(data["ohlcv"]) < self.warmup:
             return TargetAllocation({})
 
         # --- Risk-Off VWAP Signal ---
-        # Create a DataFrame for the market benchmark asset (HYG) for easier calculations.
-        market_data = [{'date': pd.to_datetime(d['date']), **d[self.market_benchmark]} for d in data['ohlcv']]
-        market_df = pd.DataFrame(market_data).set_index('date')
+        market_data_list = [{'date': pd.to_datetime(d[self.market_benchmark]['date']), **d[self.market_benchmark]} for d in data['ohlcv']]
+        market_df = pd.DataFrame(market_data_list).set_index('date')
 
-        # Determine the start of the current quarter for the quarterly VWAP calculation.
-        last_date = market_df.index[-1]
-        quarter_start_date = last_date - pd.tseries.offsets.QuarterBegin(startingMonth=1)
-        quarter_df = market_df.loc[quarter_start_date:]
-
-        # Calculate the anchored quarterly VWAP.
-        quarter_df['tpv'] = ((quarter_df['high'] + quarter_df['low'] + quarter_df['close']) / 3) * quarter_df['volume']
-        vwap_quarterly = quarter_df['tpv'].sum() / quarter_df['volume'].sum()
+        # Calculate quarterly VWAP using the helper method.
+        vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
+        
+        current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
         
-        # If market benchmark close is below its quarterly VWAP, move to 100% safety.
-        if current_close < vwap_quarterly:
-            log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({vwap_quarterly:.2f}). Allocating to BIL.")
+        # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
+        if current_close < current_vwap:
+            log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
+            self.counter = self.risk_off_wait_days
             return TargetAllocation({"BIL": 1.0})
 
         # --- Risk-On Allocation Logic ---
-        # Get the latest available Median CPI value.
+        self.counter = 0 # Explicitly reset counter when in risk-on mode.
         cpi_value = data[("median_cpi",)][-1]['value']
-
-        # Determine the pool of safe-haven assets based on the inflation regime.
-        if cpi_value < self.inflation_threshold:
-            risk_off_assets = ["TLT", "BIL", "TIP"] # In low inflation, long-term bonds (TLT) are viable.
-        else:
-            risk_off_assets = ["BIL", "TIP"] # In high inflation, prefer shorter duration and inflation-protected bonds.
         
-        # Select the single best safe asset based on momentum.
+        if cpi_value < self.inflation_threshold:
+            risk_off_assets = ["TLT", "BIL", "TIP"]
+        else:
+            risk_off_assets = ["BIL", "TIP"]
+        
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
 
-        # Select the top 3 momentum assets from the broader dividend/bond universe.
         yield_assets_momentum = {asset: self._calculate_momentum(asset, data["ohlcv"]) for asset in self.momentum_assets}
         top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:3]
         
-        # If we can't identify at least two strong momentum assets, default to BIL for safety.
         if len(top_yield_assets) < 2 or yield_assets_momentum[top_yield_assets[1]] == -999:
              log("Insufficient momentum signals among yield assets. Allocating to BIL.")
              return TargetAllocation({"BIL": 1.0})
 
         # --- Construct Final Allocation ---
         allocation = {ticker: 0.0 for ticker in self.tickers}
-
-        # Set the base allocation for the selected safe asset.
         allocation[safe_asset] = self.base_allocation
         
-        # Distribute the remaining portfolio among the top 3 yield assets.
         risk_weight = (1 - self.base_allocation) / len(top_yield_assets)
         for asset in top_yield_assets:
-            allocation[asset] += risk_weight # Use += to correctly handle if safe_asset is also a top_yield_asset
+            allocation[asset] += risk_weight
             
-        # Normalize to ensure the sum is exactly 1.0, accounting for any floating point inaccuracies.
         total_allocation = sum(allocation.values())
         if total_allocation > 0:
             for key in allocation:
