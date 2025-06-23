@@ -95,7 +95,7 @@ class TradingStrategy(Strategy):
         """
         try:
             prices = [d[asset]['close'] for d in ohlcv_data]
-            if len(prices) < self.mom_long:
+            if len(prices) < 1:
                 return -999
             ret_long = prices[-1] / prices[-self.mom_long] - 1
             ret_short = prices[-1] / prices[-self.mom_short] - 1
@@ -120,14 +120,14 @@ class TradingStrategy(Strategy):
         market_df = pd.DataFrame(market_data_list).set_index('date')
 
         # Calculate quarterly VWAP using the helper method.
-        vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
+        #vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
         current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 82)[-1]
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
         
         # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
-        if current_close < current_vwap and self.counter > 0:
+        if current_close < current_vwap and self.counter == 0:
             log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
             self.counter = self.risk_off_wait_days
             return TargetAllocation({"BIL": 1.0})
