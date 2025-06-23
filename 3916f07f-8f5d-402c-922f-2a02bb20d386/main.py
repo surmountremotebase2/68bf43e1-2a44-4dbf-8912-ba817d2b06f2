@@ -121,7 +121,7 @@ class TradingStrategy(Strategy):
 
         # Calculate quarterly VWAP using the helper method.
         #vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
-        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 50)[-1]
+        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 64)[-1]
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
