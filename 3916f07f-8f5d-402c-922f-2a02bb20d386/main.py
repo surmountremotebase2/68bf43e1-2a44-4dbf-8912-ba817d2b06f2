@@ -109,7 +109,7 @@ class TradingStrategy(Strategy):
         # If the counter is active, stay in BIL and decrement the counter.
         if self.counter > 0:
             self.counter -= 1
-            log(f"Risk-Off period active. Days remaining: {self.counter}")
+            #log(f"Risk-Off period active. Days remaining: {self.counter}")
             return TargetAllocation({"BIL": 1.0})
 
         if len(data["ohlcv"]) < self.warmup:
