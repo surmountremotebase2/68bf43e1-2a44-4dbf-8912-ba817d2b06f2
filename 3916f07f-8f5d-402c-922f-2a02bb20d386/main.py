@@ -143,7 +143,7 @@ class TradingStrategy(Strategy):
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
 
         yield_assets_momentum = {asset: self._calculate_momentum(asset, data["ohlcv"]) for asset in self.momentum_assets}
-        top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:3]
+        top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:2]
         
         if len(top_yield_assets) < 2 or yield_assets_momentum[top_yield_assets[1]] == -999:
              log("Insufficient momentum signals among yield assets. Allocating to BIL.")
