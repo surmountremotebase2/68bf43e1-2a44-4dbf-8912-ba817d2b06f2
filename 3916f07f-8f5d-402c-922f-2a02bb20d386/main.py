@@ -128,15 +128,6 @@ class TradingStrategy(Strategy):
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
         current_ema = EMA(self.market_benchmark, data["ohlcv"], 5)[-1]
-        
-        # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
-        if current_close < current_vwap and self.counter == 0:
-            log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
-            self.counter = self.risk_off_wait_days
-            return TargetAllocation({"BIL": 1.0})
-
-        # --- Risk-On Allocation Logic ---
-        self.counter = 0 # Explicitly reset counter when in risk-on mode.
         cpi_value = data[("median_cpi",)][-1]['value']
         
         if cpi_value < self.inflation_threshold:
@@ -146,6 +137,16 @@ class TradingStrategy(Strategy):
             risk_off_assets = ["BIL", "TIP"]
         
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
+        
+        # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
+        if current_close < current_vwap and self.counter == 0:
+            log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
+            self.counter = self.risk_off_wait_days
+            return TargetAllocation({safe_asset: 1.0})
+
+        # --- Risk-On Allocation Logic ---
+        self.counter = 0 # Explicitly reset counter when in risk-on mode.
+        
 
         yield_assets_momentum = {asset: self._calculate_momentum(asset, data["ohlcv"]) for asset in self.momentum_assets}
         top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:2]
