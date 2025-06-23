@@ -128,7 +128,7 @@ class TradingStrategy(Strategy):
         current_ema = EMA(self.market_benchmark, data["ohlcv"], 5)[-1]
         
         # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
-        if current_ema < current_vwap and self.counter == 0:
+        if current_close < current_vwap and self.counter == 0:
             log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
             self.counter = self.risk_off_wait_days
             return TargetAllocation({"BIL": 1.0})
