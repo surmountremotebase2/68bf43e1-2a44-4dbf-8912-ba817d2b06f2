@@ -96,13 +96,13 @@ class TradingStrategy(Strategy):
         try:
             prices = [d[asset]['close'] for d in ohlcv_data]
             close = prices[-1]
-            current_vwap = VWAP(asset, ohlcv_data, 1)[-1]
+            current_vwap = VWAP(asset, ohlcv_data, 5)[-1]
             if len(prices) < 1:
                 return -999
             ret_long = prices[-1] / prices[-self.mom_long] - 1
             ret_short = prices[-1] / prices[-self.mom_short] - 1
-            momentum_score = ret_long - (ret_short * 0.15)
-            return momentum_score if pd.notna(momentum_score) and close > current_vwap else -999
+            momentum_score = ret_long - (ret_short * 0.15) + (current_vwap - close)
+            return momentum_score if pd.notna(momentum_score) else -999
         except (KeyError, IndexError):
             return -999
 
