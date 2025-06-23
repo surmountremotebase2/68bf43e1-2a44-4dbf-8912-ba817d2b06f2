@@ -150,7 +150,7 @@ class TradingStrategy(Strategy):
         yield_assets_momentum = {asset: self._calculate_momentum(asset, data["ohlcv"]) for asset in self.momentum_assets}
         top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:2]
         
-        if len(top_yield_assets) < 2 or yield_assets_momentum[top_yield_assets[1]] == -999:
+        if len(top_yield_assets) < 1 or yield_assets_momentum[top_yield_assets[-1]] == -999:
              log("Insufficient momentum signals among yield assets. Allocating to BIL.")
              return TargetAllocation({"BIL": 1.0})
 
@@ -162,10 +162,10 @@ class TradingStrategy(Strategy):
         for asset in top_yield_assets:
             allocation[asset] += risk_weight
             
-        total_allocation = sum(allocation.values())
-        if total_allocation > 0:
-            for key in allocation:
-                allocation[key] /= total_allocation
+        #total_allocation = sum(allocation.values())
+        #if total_allocation > 0:
+        #    for key in allocation:
+        #        allocation[key] /= total_allocation
 
         #log(f"Risk-On Allocation: Safe Asset: {safe_asset}, Top Yield: {top_yield_assets}")
         return TargetAllocation(allocation)
