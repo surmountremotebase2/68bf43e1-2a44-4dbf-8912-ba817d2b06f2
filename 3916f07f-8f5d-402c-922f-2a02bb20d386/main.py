@@ -37,14 +37,14 @@ class TradingStrategy(Strategy):
         self.inflation_threshold = 4
         
         # The fixed allocation percentage for the selected safe asset.
-        self.base_allocation = 0.25
+        self.base_allocation = 0.4
         
         # A warm-up period to ensure sufficient data for calculations.
         self.warmup = self.mom_long + 5
 
         # Counter for the risk-off state duration.
         self.counter = 0
-        self.risk_off_wait_days = 4
+        self.risk_off_wait_days = 2
 
     @property
     def interval(self):
@@ -123,7 +123,7 @@ class TradingStrategy(Strategy):
 
         # Calculate quarterly VWAP using the helper method.
         #vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
-        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 100)[-1]
+        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 50)[-1]
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
