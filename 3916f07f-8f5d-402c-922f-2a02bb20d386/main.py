@@ -114,7 +114,7 @@ class TradingStrategy(Strategy):
             #log(f"Risk-Off period active. Days remaining: {self.counter}")
             return TargetAllocation({"BIL": 1.0})
 
-        if len(data["ohlcv"]) < self.warmup:
+        if len(data["ohlcv"]) < 1:
             return TargetAllocation({})
 
         # --- Risk-Off VWAP Signal ---
