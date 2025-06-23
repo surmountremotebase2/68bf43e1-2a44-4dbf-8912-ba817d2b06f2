@@ -34,7 +34,7 @@ class TradingStrategy(Strategy):
         self.mom_short = 15
         
         # The CPI level that determines the safe asset pool.
-        self.inflation_threshold = 3.5
+        self.inflation_threshold = 4
         
         # The fixed allocation percentage for the selected safe asset.
         self.base_allocation = 0.25
@@ -95,12 +95,14 @@ class TradingStrategy(Strategy):
         """
         try:
             prices = [d[asset]['close'] for d in ohlcv_data]
+            close = prices[-1]
+            current_vwap = VWAP(asset, ohlcv_data, 100)[-1]
             if len(prices) < 1:
                 return -999
             ret_long = prices[-1] / prices[-self.mom_long] - 1
             ret_short = prices[-1] / prices[-self.mom_short] - 1
             momentum_score = ret_long - (ret_short * 0.15)
-            return momentum_score if pd.notna(momentum_score) else -999
+            return momentum_score if pd.notna(momentum_score) and close > current_vwap else -999
         except (KeyError, IndexError):
             return -999
 
@@ -121,7 +123,7 @@ class TradingStrategy(Strategy):
 
         # Calculate quarterly VWAP using the helper method.
         #vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
-        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 5)[-1]
+        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 100)[-1]
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
