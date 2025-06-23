@@ -96,7 +96,7 @@ class TradingStrategy(Strategy):
         try:
             prices = [d[asset]['close'] for d in ohlcv_data]
             close = prices[-1]
-            current_vwap = VWAP(asset, ohlcv_data, 100)[-1]
+            current_vwap = VWAP(asset, ohlcv_data, 10)[-1]
             if len(prices) < 1:
                 return -999
             ret_long = prices[-1] / prices[-self.mom_long] - 1
