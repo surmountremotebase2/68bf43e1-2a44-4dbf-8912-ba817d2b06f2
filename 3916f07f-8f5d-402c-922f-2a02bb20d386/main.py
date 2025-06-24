@@ -21,13 +21,13 @@ class TradingStrategy(Strategy):
     """
     def __init__(self):
         # The universe of assets the strategy can trade.
-        self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
+        self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT", "UUP"]
         
         # HYG is used as a market benchmark for the risk-on/risk-off signal.
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM"]
+        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM", "UUP", "EMB"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
