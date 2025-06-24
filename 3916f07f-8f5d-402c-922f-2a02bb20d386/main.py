@@ -134,7 +134,7 @@ class TradingStrategy(Strategy):
             risk_off_assets = ["TLT", "BIL", "TIP"]
         else:
             #log(f"Inflation TILT: {cpi_value}")
-            risk_off_assets = ["BIL", "UUP", "TIP"]
+            risk_off_assets = ["BIL"]
         
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
         
