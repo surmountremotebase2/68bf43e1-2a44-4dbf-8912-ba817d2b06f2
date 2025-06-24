@@ -127,7 +127,7 @@ class TradingStrategy(Strategy):
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
-        current_ema = EMA(self.market_benchmark, data["ohlcv"], 5)[-1]
+        current_ema = EMA(self.market_benchmark, data["ohlcv"], 50)[-1]
         cpi_value = data[("median_cpi",)][-1]['value']
         
         if cpi_value < self.inflation_threshold:
@@ -139,7 +139,7 @@ class TradingStrategy(Strategy):
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
         
         # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
-        if current_close < current_vwap and self.counter == 0:
+        if current_close < current_ema and self.counter == 0:
             #log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
             self.counter = self.risk_off_wait_days
             return TargetAllocation({safe_asset: 1.0})
