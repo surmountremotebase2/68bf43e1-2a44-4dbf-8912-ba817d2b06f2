@@ -24,7 +24,7 @@ class TradingStrategy(Strategy):
         self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
         
         # HYG is used as a market benchmark for the risk-on/risk-off signal.
-        self.market_benchmark = "TLT"
+        self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
         self.momentum_assets = ["BND", "TLT", "HYG", "DTH", "VIG", "VYM"]
