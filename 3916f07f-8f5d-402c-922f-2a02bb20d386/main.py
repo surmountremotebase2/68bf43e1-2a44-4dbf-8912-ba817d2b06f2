@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "IEF", "TLT", "HYG", "DTH", "VIG", "VYM", "UUP"]
+        self.momentum_assets = ["BND", "AGG", "IEF", "TLT", "HYG", "DTH", "VIG", "VYM"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
@@ -127,7 +127,7 @@ class TradingStrategy(Strategy):
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
-        current_ema = EMA(self.market_benchmark, data["ohlcv"], 20)[-1]
+        current_ema = EMA(self.market_benchmark, data["ohlcv"], 50)[-1]
         cpi_value = data[("median_cpi",)][-1]['value']
         
         if cpi_value < self.inflation_threshold:
