@@ -133,14 +133,14 @@ class TradingStrategy(Strategy):
         if cpi_value < self.inflation_threshold:
             risk_off_assets = ["TLT", "BIL", "TIP"]
         else:
-            log(f"Inflation TILT: {cpi_value}")
+            #log(f"Inflation TILT: {cpi_value}")
             risk_off_assets = ["BIL", "UUP"]
         
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
         
         # If market benchmark close is below its quarterly VWAP, trigger risk-off state.
         if current_close < current_vwap and self.counter == 0:
-            log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
+            #log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
             self.counter = self.risk_off_wait_days
             return TargetAllocation({safe_asset: 1.0})
 
@@ -152,8 +152,8 @@ class TradingStrategy(Strategy):
         top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:2]
         
         if len(top_yield_assets) < 1 or yield_assets_momentum[top_yield_assets[-1]] == -999:
-             log("Insufficient momentum signals among yield assets. Allocating to BIL.")
-             return TargetAllocation({"BIL": 1.0})
+             #log("Insufficient momentum signals among yield assets. Allocating to BIL.")
+             return TargetAllocation({safe_asset: 1.0})
 
         # --- Construct Final Allocation ---
         allocation = {ticker: 0.0 for ticker in self.tickers}
