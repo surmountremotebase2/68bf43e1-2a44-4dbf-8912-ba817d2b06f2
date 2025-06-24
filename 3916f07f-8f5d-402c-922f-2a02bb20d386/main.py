@@ -131,10 +131,10 @@ class TradingStrategy(Strategy):
         cpi_value = data[("median_cpi",)][-1]['value']
         
         if cpi_value < self.inflation_threshold:
-            risk_off_assets = ["TLT", "BIL", "TIP"]
+            risk_off_assets = ["TLT", "BIL", "TIP", "UUP"]
         else:
             #log(f"Inflation TILT: {cpi_value}")
-            risk_off_assets = ["BIL"]
+            risk_off_assets = ["BIL", "UUP"]
         
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
         
