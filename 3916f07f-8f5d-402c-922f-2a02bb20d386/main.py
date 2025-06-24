@@ -27,14 +27,14 @@ class TradingStrategy(Strategy):
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "HYG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
+        self.momentum_assets = ["AGG", "HYG", "DTH", "VIG", "VYM", "PEY", "BNDX"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
         self.mom_short = 15
         
         # The CPI level that determines the safe asset pool.
-        self.inflation_threshold = 4
+        self.inflation_threshold = 3.1
         
         # The fixed allocation percentage for the selected safe asset.
         self.base_allocation = 0.2
