@@ -131,7 +131,7 @@ class TradingStrategy(Strategy):
         cpi_value = data[("median_cpi",)][-1]['value']
         
         if cpi_value < self.inflation_threshold:
-            risk_off_assets = ["TLT", "BIL", "TIP", "UUP"]
+            risk_off_assets = ["TLT", "IEF", "TIP"]
         else:
             #log(f"Inflation TILT: {cpi_value}")
             risk_off_assets = ["BIL", "UUP"]
