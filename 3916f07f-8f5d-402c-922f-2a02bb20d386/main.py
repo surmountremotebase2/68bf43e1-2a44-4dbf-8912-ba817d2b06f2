@@ -127,7 +127,7 @@ class TradingStrategy(Strategy):
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
-        current_ema = EMA(self.market_benchmark, data["ohlcv"], 30)[-1]
+        current_ema = EMA(self.market_benchmark, data["ohlcv"], 20)[-1]
         cpi_value = data[("median_cpi",)][-1]['value']
         
         if cpi_value < self.inflation_threshold:
