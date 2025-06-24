@@ -37,7 +37,7 @@ class TradingStrategy(Strategy):
         self.inflation_threshold = 3.1
         
         # The fixed allocation percentage for the selected safe asset.
-        self.base_allocation = 0.2
+        self.base_allocation = 0.33
         
         # A warm-up period to ensure sufficient data for calculations.
         self.warmup = self.mom_long + 5
