@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
+        self.momentum_assets = ["BND", "AGG", "HYG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
@@ -123,7 +123,7 @@ class TradingStrategy(Strategy):
 
         # Calculate quarterly VWAP using the helper method.
         #vwap_series = self._vwap(market_df['high'], market_df['low'], market_df['close'], market_df['volume'], anchor_period='quarter')
-        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 20)[-1]
+        current_vwap = VWAP(self.market_benchmark, data["ohlcv"], 60)[-1]
         
         #current_vwap = vwap_series.iloc[-1]
         current_close = market_df['close'].iloc[-1]
