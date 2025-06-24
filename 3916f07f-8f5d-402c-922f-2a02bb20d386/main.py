@@ -21,13 +21,13 @@ class TradingStrategy(Strategy):
     """
     def __init__(self):
         # The universe of assets the strategy can trade.
-        self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY"]
+        self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
         
         # HYG is used as a market benchmark for the risk-on/risk-off signal.
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "TLT", "HYG", "DTH", "VIG", "VYM", "PEY"]
+        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
@@ -99,8 +99,8 @@ class TradingStrategy(Strategy):
             current_vwap = VWAP(asset, ohlcv_data, 5)[-1]
             if len(prices) < 1:
                 return -999
-            ret_long = prices[-1] / prices[-self.mom_long] - 1
-            ret_short = prices[-1] / prices[-self.mom_short] - 1
+            ret_long = ( prices[-1] / prices[-self.mom_long] ) - 1
+            ret_short = ( prices[-1] / prices[-self.mom_short] ) - 1
             momentum_score = ret_long - (ret_short * 0.15) + (current_vwap - close)
             return momentum_score if pd.notna(momentum_score) else -999
         except (KeyError, IndexError):
