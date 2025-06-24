@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["AGG", "HYG", "DTH", "VIG", "VYM", "PEY", "BNDX"]
+        self.momentum_assets = ["BND", "TLT", "HYG", "DTH", "VIG", "VYM"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
