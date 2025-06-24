@@ -21,13 +21,13 @@ class TradingStrategy(Strategy):
     """
     def __init__(self):
         # The universe of assets the strategy can trade.
-        self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT", "UUP"]
+        self.tickers = ["TLT", "EMB", "HYG", "BIL", "TIP", "BND", "AGG", "DTH", "VIG", "VYM", "PEY", "BNDX", "VCIT", "UUP", "IEF"]
         
         # HYG is used as a market benchmark for the risk-on/risk-off signal.
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM", "UUP"]
+        self.momentum_assets = ["BND", "AGG", "IEF", "TLT", "HYG", "DTH", "VIG", "VYM", "EMB"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
@@ -37,7 +37,7 @@ class TradingStrategy(Strategy):
         self.inflation_threshold = 3.5
         
         # The fixed allocation percentage for the selected safe asset.
-        self.base_allocation = 0.4
+        self.base_allocation = 0.3
         
         # A warm-up period to ensure sufficient data for calculations.
         self.warmup = 1
@@ -149,7 +149,7 @@ class TradingStrategy(Strategy):
         
 
         yield_assets_momentum = {asset: self._calculate_momentum(asset, data["ohlcv"]) for asset in self.momentum_assets}
-        top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:2]
+        top_yield_assets = sorted(yield_assets_momentum, key=yield_assets_momentum.get, reverse=True)[:3]
         
         if len(top_yield_assets) < 1 or yield_assets_momentum[top_yield_assets[-1]] == -999:
              #log("Insufficient momentum signals among yield assets. Allocating to BIL.")
