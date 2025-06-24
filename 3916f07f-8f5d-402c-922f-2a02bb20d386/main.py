@@ -44,7 +44,7 @@ class TradingStrategy(Strategy):
 
         # Counter for the risk-off state duration.
         self.counter = 0
-        self.risk_off_wait_days = 2
+        self.risk_off_wait_days = 4
 
     @property
     def interval(self):
