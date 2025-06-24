@@ -163,10 +163,10 @@ class TradingStrategy(Strategy):
         for asset in top_yield_assets:
             allocation[asset] += risk_weight
             
-        #total_allocation = sum(allocation.values())
-        #if total_allocation > 0:
-        #    for key in allocation:
-        #        allocation[key] /= total_allocation
+        total_allocation = sum(allocation.values())
+        if total_allocation > 0:
+            for key in allocation:
+                allocation[key] /= total_allocation
 
         #log(f"Risk-On Allocation: Safe Asset: {safe_asset}, Top Yield: {top_yield_assets}")
         return TargetAllocation(allocation)
