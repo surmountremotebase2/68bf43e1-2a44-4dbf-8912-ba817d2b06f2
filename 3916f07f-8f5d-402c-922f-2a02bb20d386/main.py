@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM", "UUP", "EMB"]
+        self.momentum_assets = ["BND", "AGG", "TLT", "HYG", "DTH", "VIG", "VYM", "EMB"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
@@ -134,7 +134,7 @@ class TradingStrategy(Strategy):
             risk_off_assets = ["TLT", "BIL", "TIP"]
         else:
             log(f"Inflation TILT: {cpi_value}")
-            risk_off_assets = ["BIL"]
+            risk_off_assets = ["BIL", "UUP"]
         
         safe_asset = max(risk_off_assets, key=lambda asset: self._calculate_momentum(asset, data["ohlcv"]))
         
