@@ -34,13 +34,13 @@ class TradingStrategy(Strategy):
         self.mom_short = 15
         
         # The CPI level that determines the safe asset pool.
-        self.inflation_threshold = 4.5
+        self.inflation_threshold = 2.8
         
         # The fixed allocation percentage for the selected safe asset.
         self.base_allocation = 0.33
         
         # A warm-up period to ensure sufficient data for calculations.
-        self.warmup = self.mom_long + 5
+        self.warmup = 1
 
         # Counter for the risk-off state duration.
         self.counter = 0
