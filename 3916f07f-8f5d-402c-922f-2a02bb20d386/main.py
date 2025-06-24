@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
         self.market_benchmark = "HYG"
         
         # These are the assets considered for the primary momentum-based allocation.
-        self.momentum_assets = ["BND", "AGG", "IEF", "TLT", "HYG", "DTH", "VIG", "VYM", "EMB"]
+        self.momentum_assets = ["BND", "AGG", "IEF", "TLT", "HYG", "DTH", "VIG", "VYM", "UUP"]
         
         # Parameters for the momentum calculation.
         self.mom_long = 125
@@ -44,7 +44,7 @@ class TradingStrategy(Strategy):
 
         # Counter for the risk-off state duration.
         self.counter = 0
-        self.risk_off_wait_days = 4
+        self.risk_off_wait_days = 3
 
     @property
     def interval(self):
