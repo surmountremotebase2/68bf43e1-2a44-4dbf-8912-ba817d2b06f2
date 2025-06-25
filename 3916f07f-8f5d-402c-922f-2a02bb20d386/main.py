@@ -142,7 +142,7 @@ class TradingStrategy(Strategy):
         if current_close < current_ema and self.counter == 0:
             #log(f"Risk-Off Triggered: {self.market_benchmark} close ({current_close:.2f}) < Quarterly VWAP ({current_vwap:.2f}). Activating counter.")
             self.counter = self.risk_off_wait_days
-            return TargetAllocation({safe_asset: 1.0})
+            return TargetAllocation({"BIL": 1.0})
 
         # --- Risk-On Allocation Logic ---
         self.counter = 0 # Explicitly reset counter when in risk-on mode.
