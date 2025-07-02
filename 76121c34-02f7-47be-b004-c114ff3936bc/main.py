@@ -51,7 +51,7 @@ class TradingStrategy(Strategy):
                 average_ranks.append((coin, avg_rank))
 
         # Select top 20 coins by average AltRank
-        top_20 = sorted(average_ranks, key=lambda x: x[1])[:10]
+        top_20 = sorted(average_ranks, key=lambda x: x[1])[:5]
         #log(f"rankings {top_20[:3]}")
 
         allocation = {}
