@@ -38,10 +38,10 @@ class TradingStrategy(Strategy):
         alt_rank_history = {}
         for day_data in crypto_rankings[-30:]:
             for coin, rank in day_data["alt_ranking"].items():
-                if coin != "APE" or coin != "SUI" or coin != "REZ":
-                    if coin not in alt_rank_history:
-                        alt_rank_history[coin] = []
-                    alt_rank_history[coin].append(rank)
+                #if coin != "APE" or coin != "SUI" or coin != "REZ":
+                if coin not in alt_rank_history:
+                    alt_rank_history[coin] = []
+                alt_rank_history[coin].append(rank)
 
         # Compute average AltRank
         average_ranks = []
@@ -51,8 +51,8 @@ class TradingStrategy(Strategy):
                 average_ranks.append((coin, avg_rank))
 
         # Select top 20 coins by average AltRank
-        top_20 = sorted(average_ranks, key=lambda x: x[1])[:5]
-        log(f"rankings {top_20[:3]}")
+        top_20 = sorted(average_ranks, key=lambda x: x[1])[:10]
+        #log(f"rankings {top_20[:3]}")
 
         allocation = {}
         #self.tickers = []
