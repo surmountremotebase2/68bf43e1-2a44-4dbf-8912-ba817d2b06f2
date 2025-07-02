@@ -29,14 +29,14 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         crypto_rankings = data[("crypto_alt_ranking",)]
-        log(f"rankings {crypto_rankings}")
+        #log(f"rankings {crypto_rankings[:3]}")
 
         if len(crypto_rankings) < 5:
             return TargetAllocation({})
 
         # Prepare AltRank history
         alt_rank_history = {}
-        for day_data in crypto_rankings[-5:]:
+        for day_data in crypto_rankings[-30:]:
             for coin, rank in day_data["alt_ranking"].items():
                 if coin not in alt_rank_history:
                     alt_rank_history[coin] = []
@@ -51,6 +51,7 @@ class TradingStrategy(Strategy):
 
         # Select top 20 coins by average AltRank
         top_20 = sorted(average_ranks, key=lambda x: x[1])[:20]
+        log(f"rankings {top_20[:3]}")
 
         allocation = {}
         self.tickers = []
