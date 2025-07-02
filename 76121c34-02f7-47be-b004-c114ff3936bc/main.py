@@ -5,7 +5,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         self.data_list = [CryptoAltRanking()]
         self.tickers = []
-        self.day_counter = 0
+        self.counter = 0
 
     @property
     def interval(self):
@@ -21,10 +21,10 @@ class TradingStrategy(Strategy):
 
     def run(self, data):
         # Increment the internal day counter
-        self.day_counter += 1
+        self.counter += 1
 
         # Only rebalance every 30 days
-        if self.day_counter % 30 != 1:
+        if self.counter % 30 != 1:
             return TargetAllocation({})
 
         crypto_rankings = data[("crypto_alt_ranking",)]
