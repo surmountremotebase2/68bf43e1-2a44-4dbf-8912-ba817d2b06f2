@@ -29,12 +29,12 @@ class TradingStrategy(Strategy):
 
         crypto_rankings = data[("crypto_alt_ranking",)]
 
-        if len(crypto_rankings) < 30:
+        if len(crypto_rankings) < 5:
             return TargetAllocation({})
 
         # Prepare AltRank history
         alt_rank_history = {}
-        for day_data in crypto_rankings[-30:]:
+        for day_data in crypto_rankings[-5:]:
             for coin, rank in day_data["alt_ranking"].items():
                 if coin not in alt_rank_history:
                     alt_rank_history[coin] = []
