@@ -51,7 +51,7 @@ class TradingStrategy(Strategy):
                 average_ranks.append((coin, avg_rank))
 
         # Select top 20 coins by average AltRank
-        top_20 = sorted(average_ranks, key=lambda x: x[1])[:20]
+        top_20 = sorted(average_ranks, key=lambda x: x[1])[:5]
         log(f"rankings {top_20[:3]}")
 
         allocation = {}
@@ -59,7 +59,7 @@ class TradingStrategy(Strategy):
 
         for coin, _ in top_20:
             symbol = coin + "USD"
-            allocation[symbol] = 0.05
+            allocation[symbol] = 1 / len(top_20)
             #self.tickers.append(symbol)
 
         return TargetAllocation(allocation)
