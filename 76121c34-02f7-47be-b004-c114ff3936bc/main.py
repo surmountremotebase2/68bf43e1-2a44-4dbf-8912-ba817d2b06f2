@@ -1,5 +1,6 @@
 from surmount.base_class import Strategy, TargetAllocation
 from surmount.data import CryptoAltRanking
+from surmount.logging import log
 
 class TradingStrategy(Strategy):
     def __init__(self):
@@ -28,6 +29,7 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         crypto_rankings = data[("crypto_alt_ranking",)]
+        log(f"rankings {crypto_rankings}")
 
         if len(crypto_rankings) < 5:
             return TargetAllocation({})
