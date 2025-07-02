@@ -1,1 +1,61 @@
-#Type code here
+from surmount.base_class import Strategy, TargetAllocation
+from surmount.data import CryptoAltRanking
+
+class TradingStrategy(Strategy):
+    def __init__(self):
+        self.data_list = [CryptoAltRanking()]
+        self.tickers = []
+        self.day_counter = 0
+
+    @property
+    def interval(self):
+        return "1day"
+
+    @property
+    def assets(self):
+        return self.tickers
+
+    @property
+    def data(self):
+        return self.data_list
+
+    def run(self, data):
+        # Increment the internal day counter
+        self.day_counter += 1
+
+        # Only rebalance every 30 days
+        if self.day_counter % 30 != 1:
+            return TargetAllocation({})
+
+        crypto_rankings = data[("crypto_alt_ranking",)]
+
+        if len(crypto_rankings) < 30:
+            return TargetAllocation({})
+
+        # Prepare AltRank history
+        alt_rank_history = {}
+        for day_data in crypto_rankings[-30:]:
+            for coin, rank in day_data["alt_ranking"].items():
+                if coin not in alt_rank_history:
+                    alt_rank_history[coin] = []
+                alt_rank_history[coin].append(rank)
+
+        # Compute average AltRank
+        average_ranks = []
+        for coin, ranks in alt_rank_history.items():
+            if len(ranks) == 30:
+                avg_rank = sum(ranks) / len(ranks)
+                average_ranks.append((coin, avg_rank))
+
+        # Select top 20 coins by average AltRank
+        top_20 = sorted(average_ranks, key=lambda x: x[1])[:20]
+
+        allocation = {}
+        self.tickers = []
+
+        for coin, _ in top_20:
+            symbol = coin + "USD"
+            allocation[symbol] = 0.05
+            self.tickers.append(symbol)
+
+        return TargetAllocation(allocation)
