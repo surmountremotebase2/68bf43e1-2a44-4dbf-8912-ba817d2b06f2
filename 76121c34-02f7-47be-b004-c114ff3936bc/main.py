@@ -38,7 +38,7 @@ class TradingStrategy(Strategy):
         alt_rank_history = {}
         for day_data in crypto_rankings[-30:]:
             for coin, rank in day_data["alt_ranking"].items():
-                if coin != "APE":
+                if coin != "APE" or coin != "SUI":
                     if coin not in alt_rank_history:
                         alt_rank_history[coin] = []
                     alt_rank_history[coin].append(rank)
@@ -55,11 +55,11 @@ class TradingStrategy(Strategy):
         log(f"rankings {top_20[:3]}")
 
         allocation = {}
-        self.tickers = []
+        #self.tickers = []
 
         for coin, _ in top_20:
             symbol = coin + "USD"
             allocation[symbol] = 0.05
-            self.tickers.append(symbol)
+            #self.tickers.append(symbol)
 
         return TargetAllocation(allocation)
