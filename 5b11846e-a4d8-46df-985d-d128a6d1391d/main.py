@@ -28,7 +28,7 @@ class TradingStrategy(Strategy):
         if self.counter % 30 != 1:
             return TargetAllocation({})
 
-        crypto_rankings = data[("kraken_crypto_alt_ranking",)]
+        crypto_rankings = data[("kraken_crypto_alt_ranking",)].dropna()
         #log(f"rankings {crypto_rankings[:10]}")
 
         if len(crypto_rankings) < 5:
