@@ -29,7 +29,7 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         crypto_rankings = data[("kraken_crypto_alt_ranking",)]
-        crypto_rankings = [x for x in crypto_rankings[-50:] if x]
+        crypto_rankings = [x for x in crypto_rankings[-30:] if x]
         #log(f"rankings {crypto_rankings[:10]}")
 
         if len(crypto_rankings) < 5:
@@ -47,7 +47,7 @@ class TradingStrategy(Strategy):
         # Compute average AltRank
         average_ranks = []
         for coin, ranks in alt_rank_history.items():
-            if len(ranks) == 50:
+            if len(ranks) == 30:
                 avg_rank = sum(ranks) / len(ranks)
                 average_ranks.append((coin, avg_rank))
 
