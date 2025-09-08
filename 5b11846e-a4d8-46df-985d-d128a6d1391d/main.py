@@ -38,10 +38,9 @@ class TradingStrategy(Strategy):
         alt_rank_history = {}
         for day_data in crypto_rankings[-30:]:
             for coin, rank in day_data["alt_ranking"].items():
-                if coin != "APE" or coin != "SUI" or coin != "REZ":
-                    if coin not in alt_rank_history:
-                        alt_rank_history[coin] = []
-                    alt_rank_history[coin].append(rank)
+                if coin not in alt_rank_history:
+                    alt_rank_history[coin] = []
+                alt_rank_history[coin].append(rank)
 
         # Compute average AltRank
         average_ranks = []
