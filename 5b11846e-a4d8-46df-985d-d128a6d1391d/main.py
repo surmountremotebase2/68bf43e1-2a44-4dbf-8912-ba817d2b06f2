@@ -47,7 +47,7 @@ class TradingStrategy(Strategy):
         # Compute average AltRank
         average_ranks = []
         for coin, ranks in alt_rank_history.items():
-            if len(ranks) == 30:
+            if len(ranks) == 40:
                 avg_rank = sum(ranks) / len(ranks)
                 average_ranks.append((coin, avg_rank))
 
