@@ -29,7 +29,7 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         crypto_rankings = data[("kraken_crypto_alt_ranking",)]
-        #log(f"rankings {crypto_rankings[:3]}")
+        log(f"rankings {crypto_rankings[:10]}")
 
         if len(crypto_rankings) < 5:
             return TargetAllocation({})
