@@ -29,7 +29,7 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         crypto_rankings = data[("kraken_crypto_alt_ranking",)]
-        #crypto_rankings = [x for x in crypto_rankings if x]
+        crypto_rankings = [x for x in crypto_rankings[:50] if x]
         #log(f"rankings {crypto_rankings[:10]}")
 
         if len(crypto_rankings) < 5:
@@ -37,7 +37,7 @@ class TradingStrategy(Strategy):
 
         # Prepare AltRank history
         alt_rank_history = {}
-        for day_data in crypto_rankings[:30]:
+        for day_data in crypto_rankings:
             for coin, rank in day_data["alt_ranking"].items():
                 if coin != "RENDER":
                     if coin not in alt_rank_history:
@@ -47,12 +47,12 @@ class TradingStrategy(Strategy):
         # Compute average AltRank
         average_ranks = []
         for coin, ranks in alt_rank_history.items():
-            if len(ranks) == 30:
+            if len(ranks) == 50:
                 avg_rank = sum(ranks) / len(ranks)
                 average_ranks.append((coin, avg_rank))
 
         # Select top 20 coins by average AltRank
-        top_20 = sorted(average_ranks, key=lambda x: x[1])[:10]
+        top_20 = sorted(average_ranks, key=lambda x: x[1])[:20]
         log(f"rankings {top_20[:10]}")
 
         allocation = {}
