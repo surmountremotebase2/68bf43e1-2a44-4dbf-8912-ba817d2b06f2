@@ -28,7 +28,7 @@ class TradingStrategy(Strategy):
         if self.counter % 30 != 1:
             return TargetAllocation({})
 
-        crypto_rankings = data[("kraken_crypto_alt_ranking",)]
+        crypto_rankings = data[("coinbase_crypto_alt_ranking",)]
         crypto_rankings = [x for x in crypto_rankings[-40:] if x]
         #log(f"rankings {crypto_rankings[:10]}")
 
