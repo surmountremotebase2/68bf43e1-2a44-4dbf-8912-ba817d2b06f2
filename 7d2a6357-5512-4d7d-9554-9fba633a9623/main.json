@@ -1,1 +1,1 @@
-{}
+{"allocations": {"NVDA": 12.5, "MSFT": 12.5, "AAPL": 12.5, "GOOG": 12.5, "AMZN": 12.5, "META": 12.5, "AVGO": 12.5, "ORCL": 12.5}, "frequency": 6, "name": "FundManagerTEST", "period": "months"}
