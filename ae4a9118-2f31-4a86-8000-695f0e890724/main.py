@@ -257,7 +257,7 @@ class TradingStrategy(Strategy):
             return {"En": En, "EAn": EAn}
 
         except Exception:
-            return None
+            return 0.0
 
     # --------------------------------------------------
     # DCF FUNCTION
