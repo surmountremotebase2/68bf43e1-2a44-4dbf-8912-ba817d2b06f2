@@ -12,7 +12,7 @@ from surmount.logging import log
 
 class TradingStrategy(Strategy):
 
-    def __init__(self):
+    def init(self):
         # ---- MUST EXIST BEFORE init() ----
         raw_tickers = [
             "MMM", "AOS", "ABT", "ABBV", "ACN", "ADBE", "AMD", "AES", "AFL", "A",
@@ -23,7 +23,7 @@ class TradingStrategy(Strategy):
         self.tickers = sorted(set(raw_tickers))
         self.last_alloc = {}
 
-    def init(self):
+    
         # ---- REBALANCE ----
         self.rebalance_interval = 30
         self.days_since_rebalance = 30
