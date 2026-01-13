@@ -1,9 +1,13 @@
+import numpy as np
 from surmount.base_class import Strategy, TargetAllocation
 from surmount.technical_indicators import ATR
 from surmount.logging import log
-from surmount.data import LeveredDCF, EarningsSurprises, EarningsCalendar, AnalystEstimates
-
-import numpy as np
+from surmount.data import (
+    EarningsSurprises,
+    EarningsCalendar,
+    AnalystEstimates,
+    LeveredDCF
+)
 
 
 class TradingStrategy(Strategy):
@@ -12,11 +16,11 @@ class TradingStrategy(Strategy):
 
         raw_tickers = [
             "MMM", "AOS", "ABT", "ABBV", "ACN", "ADBE", "AMD", "AES", "AFL", "A",
-            # ... (UNCHANGED FULL TICKER LIST)
+            # (full original list unchanged)
             "ZBRA", "ZBH", "ZTS"
         ]
 
-        self.tickers = sorted(list(set(raw_tickers)))
+        self.tickers = sorted(set(raw_tickers))
 
         # --- REBALANCE & RISK STATE ---
         self.rebalance_interval = 30
@@ -38,7 +42,7 @@ class TradingStrategy(Strategy):
         self.Weight_En = 0.4
         self.Weight_EAn = 0.6
 
-        # --- DATA LOADING (REPLACED DATASETS) ---
+        # --- DATASETS (EXAMPLE-COMPLIANT) ---
         self.data_list = []
         for ticker in self.tickers:
             self.data_list.extend([
@@ -60,26 +64,23 @@ class TradingStrategy(Strategy):
     def data(self):
         return self.data_list
 
-    # ------------------------------------------------------------------
-    # LIQUIDITY FILTER (UNCHANGED)
-    # ------------------------------------------------------------------
-    def check_liquidity(self, ticker, ohlcv_data):
-        if not ohlcv_data:
+    # --------------------------------------------------
+    # LIQUIDITY FILTER
+    # --------------------------------------------------
+    def check_liquidity(self, ticker, bars):
+        if not bars or len(bars) < 5:
             return False
 
-        recent = ohlcv_data[-self.liquidity_lookback:]
-        if len(recent) < 5:
-            return False
-
+        recent = bars[-self.liquidity_lookback:]
         avg_vol = np.mean([b["volume"] for b in recent])
         price = recent[-1]["close"]
         return avg_vol * price >= self.min_dollar_volume
 
-    # ------------------------------------------------------------------
-    # CORE RUN LOOP (UNCHANGED)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
+    # MAIN LOOP
+    # --------------------------------------------------
     def run(self, data):
-        ohlcv = data.get("ohlcv", {})
+        ohlcv = data["ohlcv"]
         holdings = data.get("holdings", {})
 
         if not ohlcv:
@@ -87,22 +88,21 @@ class TradingStrategy(Strategy):
 
         # ---- DAILY RISK MGMT ----
         current_holdings = {k for k, v in holdings.items() if v > 0}
-        tracked = set(self.holdings_info.keys())
-        active = current_holdings & tracked
+        active = current_holdings & set(self.holdings_info.keys())
 
         to_exit = set()
         partial_sells = {}
 
         for ticker in active:
-            bars = ohlcv.get(ticker, [])
+            bars = [d[ticker] for d in ohlcv if ticker in d]
             if not bars:
                 continue
 
             price = bars[-1]["close"]
             entry = self.holdings_info[ticker]["entry_price"]
 
-            atr = ATR(ticker, bars, 14)
-            atr_val = atr[-1] if atr else 0
+            atr_series = ATR(ticker, bars, 14)
+            atr_val = atr_series[-1] if atr_series else 0
 
             if price - entry < -0.10 * atr_val:
                 to_exit.add(ticker)
@@ -124,13 +124,16 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         self.days_since_rebalance = 0
+        log("Monthly rebalance")
 
-        # ---- UNIVERSE SCORING ----
-        liquid = [
-            t for t in self.tickers
-            if self.check_liquidity(t, ohlcv.get(t, []))
-        ]
+        # ---- LIQUIDITY FILTER ----
+        liquid = []
+        for t in self.tickers:
+            bars = [d[t] for d in ohlcv if t in d]
+            if self.check_liquidity(t, bars):
+                liquid.append(t)
 
+        # ---- SCORING ----
         scores = {}
         for ticker in liquid:
             s = self.calculate_scores(ticker, data)
@@ -158,21 +161,28 @@ class TradingStrategy(Strategy):
         final_assets = set(eligible) - to_exit
 
         # ---- ALLOCATION ----
-        total = sum(max(scores[t]["combined"], 0) for t in final_assets)
-        allocation = {}
+        alloc_scores = {}
+        total = 0.0
 
         for t in final_assets:
-            allocation[t] = max(scores[t]["combined"], 0) / total
+            score = max(scores[t]["combined"], 0)
+            alloc_scores[t] = score
+            total += score
+
             if t not in self.holdings_info:
-                self.holdings_info[t] = {
-                    "entry_price": ohlcv[t][-1]["close"]
-                }
+                bars = [d[t] for d in ohlcv if t in d]
+                self.holdings_info[t] = {"entry_price": bars[-1]["close"]}
+
+        allocation = {}
+        if total > 0:
+            for t, s in alloc_scores.items():
+                allocation[t] = s / total
 
         return TargetAllocation(allocation)
 
-    # ------------------------------------------------------------------
-    # SCORE CALCULATION (DATA ACCESS ADAPTED)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
+    # SCORE CALCULATION
+    # --------------------------------------------------
     def calculate_scores(self, ticker, data):
         try:
             earnings = data.get(("earnings_surprises", ticker))
@@ -197,16 +207,16 @@ class TradingStrategy(Strategy):
             B3 = (ebitda_est / ebitda_act) - 1 if ebitda_est and ebitda_act else 0
 
             En = self.W1 * B1 + self.W2 * B2 + self.W3 * B3
-            EAn = En  # unchanged structure
+            EAn = En
 
             return {"En": En, "EAn": EAn}
 
         except Exception:
             return None
 
-    # ------------------------------------------------------------------
-    # DCF FUNCTION (UNCHANGED)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
+    # DCF FUNCTION
+    # --------------------------------------------------
     def func_DF(self, ticker, data, current_price):
         try:
             dcf = data.get(("levered_dcf", ticker))
@@ -217,7 +227,8 @@ class TradingStrategy(Strategy):
             pct = (dcf_price / base) - 1 if base else 0
 
             if delta < 0:
-                atr = ATR(ticker, data["ohlcv"][ticker], 14)
+                bars = [d[ticker] for d in data["ohlcv"] if ticker in d]
+                atr = ATR(ticker, bars, 14)
                 atr_val = atr[-1] if atr else 1
                 return pct / (delta * atr_val) if delta else pct
 
