@@ -1,12 +1,11 @@
 from surmount.base_class import Strategy, TargetAllocation, backtest
 from surmount.logging import log
 from surmount.data import NDWFirstTrustFocusFive
-from datetime import datetime
 
 class TradingStrategy(Strategy):
-    def init(self):
+    def __init__(self):
+        self.data_list = [HouseEnergyAndCommerceCommittee()]
         self.tickers = ["SPY"]
-        self.data_list = [NDWFirstTrustFocusFive()]
 
     @property
     def interval(self):
