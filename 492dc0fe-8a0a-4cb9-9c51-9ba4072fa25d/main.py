@@ -20,9 +20,9 @@ class TradingStrategy(Strategy):
         return self.data_list
 
     def run(self, data):
-        log(str(self.data_list))
+        #log(str(self.data_list))
         for i in self.data_list:
-            log(str(i))
+            #log(str(i))
             if tuple(i)[0] == "ndw_ftrust5":
                 ndw_data = data.get(tuple(i))
                 if ndw_data and len(ndw_data) > 0:
