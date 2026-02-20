@@ -22,7 +22,7 @@ class TradingStrategy(Strategy):
     def run(self, data):
         log(str(self.data_list))
         for i in self.data_list:
-            log(i)
+            log(str(i))
             if tuple(i)[0] == "ndw_ftrust5":
                 ndw_data = data.get(tuple(i))
                 if ndw_data and len(ndw_data) > 0:
