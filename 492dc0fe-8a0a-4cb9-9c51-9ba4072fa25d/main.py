@@ -30,4 +30,3 @@ class TradingStrategy(Strategy):
                     log(allocations)
                     if total > 0:
                         return TargetAllocation({k: v / total for k, v in allocations.items()})
-        return None
