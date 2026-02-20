@@ -4,7 +4,7 @@ from surmount.data import NDWFirstTrustFocusFive
 
 class TradingStrategy(Strategy):
     def __init__(self):
-        self.data_list = [HouseEnergyAndCommerceCommittee()]
+        self.data_list = [NDWFirstTrustFocusFive()]
         self.tickers = ["SPY"]
 
     @property
