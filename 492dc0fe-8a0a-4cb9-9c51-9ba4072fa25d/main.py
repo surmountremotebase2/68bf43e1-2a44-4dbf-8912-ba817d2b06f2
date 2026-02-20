@@ -5,7 +5,7 @@ from datetime import datetime
 
 class TradingStrategy(Strategy):
     def init(self):
-        self.tickers = []
+        self.tickers = ["SPY"]
         self.data_list = [NDWFirstTrustFocusFive()]
 
     @property
