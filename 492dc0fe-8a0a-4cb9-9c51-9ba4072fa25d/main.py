@@ -28,6 +28,6 @@ class TradingStrategy(Strategy):
                 if ndw_data and len(ndw_data) > 0:
                     allocations = ndw_data[-1].get("allocations", {})
                     total = sum(allocations.values())
-                    log(allocations)
+                    log(str(allocations))
                     if total > 0:
                         return TargetAllocation({k: v / total for k, v in allocations.items()})
