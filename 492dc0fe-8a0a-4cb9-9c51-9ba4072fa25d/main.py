@@ -26,7 +26,8 @@ class TradingStrategy(Strategy):
             if tuple(i)[0] == "ndw_ftrust5":
                 ndw_data = data.get(tuple(i))
                 if ndw_data and len(ndw_data) > 0:
-                    allocations = ndw_data[-1].get("allocations", {})
+                    #allocations = ndw_data[-1].get("allocations", {})
+                    allocations = ndw_data[0].get("allocations", {})
                     total = sum(allocations.values())
                     log(str(allocations))
                     if total > 0:
