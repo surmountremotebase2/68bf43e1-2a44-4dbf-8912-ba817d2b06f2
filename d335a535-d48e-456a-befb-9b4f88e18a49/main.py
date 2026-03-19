@@ -18,7 +18,7 @@ class TradingStrategy(Strategy):
       atr = ATR("TQQQ", d, 40)
       qqq_stake = 0
       
-      if len(d)>3 and (("13:00" or "13:30") in d[-1]["TQQQ"]["date"]) and atr[-1]/d[-1]["TQQQ"]["close"]>0.001:
+      if len(d)>3 and "13:30" in d[-1]["TQQQ"]["date"] and atr[-1]/d[-1]["TQQQ"]["close"]>0.001:
          v_shape = d[-2]["TQQQ"]["close"]<d[-3]["TQQQ"]["close"] and d[-1]["TQQQ"]["close"]>d[-2]["TQQQ"]["close"]
          log(str(v_shape))
          log(d[-1]["TQQQ"]["date"])
