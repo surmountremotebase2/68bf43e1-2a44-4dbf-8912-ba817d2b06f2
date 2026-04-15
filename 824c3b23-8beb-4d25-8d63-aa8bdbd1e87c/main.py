@@ -233,6 +233,7 @@ class TradingStrategy(Strategy):
         self.prev_top_asset = top_asset
         self.last_alloc = alloc
 
+        log(f"Allocation: {alloc}")
         log(
             f"Top: {top_asset} | AdjStrength: {round(top_data['adj_strength'],3)} "
             f"| Conviction: {round(conviction,3)} | Exposure: {round(final_exposure,2)}"
