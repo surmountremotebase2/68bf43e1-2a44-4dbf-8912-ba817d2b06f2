@@ -7,8 +7,10 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
 
     def __init__(self):
-        self._assets = ["SPY", "QQQ", "TLT", "IEF", "GLD", "DBC", "UUP", "BIL"]
-        self.risk_assets = ["SPY", "QQQ", "TLT", "IEF", "GLD", "DBC", "UUP"]
+        #self._assets = ["SPY", "QQQ", "TLT", "IEF", "GLD", "DBC", "UUP", "BIL"]
+        self._assets = ["SSO", "GPIX", "BCX", "ROBO", "BLOK", "DGT", "QTUM", "IDVO", "IDMO", "SETM", "NLR", "LQDW", "CSHI", "BIL"]
+        #self.risk_assets = ["SPY", "QQQ", "TLT", "IEF", "GLD", "DBC", "UUP"]
+        self.risk_assets = ["SSO", "GPIX", "BCX", "ROBO", "BLOK", "DGT", "QTUM", "IDVO", "IDMO", "SETM", "NLR", "LQDW", "CSHI"]
         self.safe_asset = "BIL"
 
         self.last_alloc = {a: 0.0 for a in self._assets}
