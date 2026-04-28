@@ -6,7 +6,7 @@ import pandas as pd
 class TradingStrategy(Strategy):
     def __init__(self):
         # Focus tickers for the strategy
-        self.tickers = ["QQQ", "XLK", "SPY", "TQQQ"]
+        self.tickers = ["QQQ", "XLK", "SPY", "SMH", "XLV"]
         # In the Surmount framework, we use ohlcv data directly. 
         # For ATR% calculations, we leverage the daily interval.
         self.data_list = [] 
