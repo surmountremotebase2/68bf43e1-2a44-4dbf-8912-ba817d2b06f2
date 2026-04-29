@@ -21,7 +21,7 @@ class TradingStrategy(Strategy):
         allocation_dict = {ticker: 0 for ticker in self.tickers}
         
         # Ensure we have enough data for a 200-period EMA
-        if len(ohlcv) < 1:
+        if len(ohlcv) < 100:
             return TargetAllocation(allocation_dict)
 
         # Strategy Parameters
