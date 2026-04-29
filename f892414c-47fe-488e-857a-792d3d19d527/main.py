@@ -31,7 +31,7 @@ class TradingStrategy(Strategy):
             atr_values = ATR(ticker, ohlcv, 14)
             
             # --- CHANGED: Market filter is now a 200 EMA ---
-            ema_market = EMA(ticker, ohlcv, 200)
+            ema_market = EMA(ticker, ohlcv, 100)
             
             if bb_data is None or atr_values is None or ema_market is None:
                 continue
