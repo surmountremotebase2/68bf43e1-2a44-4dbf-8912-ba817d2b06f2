@@ -228,10 +228,6 @@ class TradingStrategy(Strategy):
         alloc[top_asset] = float(final_exposure)
         alloc[self.safe_asset] = float(1.0 - final_exposure)
 
-        # Reduce micro-rebalancing
-        prev_exposure = self.last_alloc.get(top_asset, 0.0)
-        if abs(final_exposure - prev_exposure) < 0.05:
-            return TargetAllocation(self.last_alloc)
 
         self.prev_top_asset = top_asset
         self.last_alloc = alloc
@@ -241,5 +237,11 @@ class TradingStrategy(Strategy):
             f"Top: {top_asset} | AdjStrength: {round(top_data['adj_strength'],3)} "
             f"| Conviction: {round(conviction,3)} | Exposure: {round(final_exposure,2)}"
         )
+
+
+        # Reduce micro-rebalancing
+        prev_exposure = self.last_alloc.get(top_asset, 0.0)
+        if abs(final_exposure - prev_exposure) < 0.05:
+            return TargetAllocation(self.last_alloc)
 
         return TargetAllocation(self.last_alloc)
