@@ -1,17 +1,41 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import SMA, EMA
+from surmount.technical_indicators import SMA, STDEV
 from surmount.data import MedianCPI
 from surmount.logging import log
-import math
 
 
 class TradingStrategy(Strategy):
 
     def __init__(self):
+
         self.tickers = [
-            "CWB", "HYG", "TLT", "IEF", "TIP", "SHY", "SPY", "GLD"
+            "SPY",
+            "GLD",
+            "CWB",
+            "HYG",
+            "TLT",
+            "IEF",
+            "TIP",
+            "SHY"
         ]
-        self.data_list = [MedianCPI()]
+
+        self.trading_assets = [
+            "CWB",
+            "HYG",
+            "TLT",
+            "IEF",
+            "TIP",
+            "SHY"
+        ]
+
+        self.data_list = [
+            MedianCPI()
+        ]
+
+        self.target_vol = 0.10
+        self.vol_lookback = 64
+        self.max_leverage = 1.0
+        self.min_leverage = 0.0
 
     @property
     def assets(self):
@@ -25,146 +49,349 @@ class TradingStrategy(Strategy):
     def data(self):
         return self.data_list
 
-    # =========================================================
-    # Helpers
-    # =========================================================
+    # ============================================================
+    # HELPERS
+    # ============================================================
 
-    def closes(self, ohlcv, ticker):
-        return [b[ticker]["close"] for b in ohlcv if ticker in b]
+    def compute_return(self, prices, lookback):
 
-    def monthly(self, series):
-        return series[::21] if len(series) > 21 else series
-
-    def mom6(self, series):
-        lb = 126
-        if len(series) < lb + 1:
-            return None
-        return (series[-1] / series[-lb]) - 1
-
-    def vol20(self, series):
-        if len(series) < 22:
+        if len(prices) <= lookback:
             return None
 
-        r = []
-        for i in range(-20, 0):
-            if series[i - 1] == 0:
-                continue
-            r.append(series[i] / series[i - 1] - 1)
+        current = prices[-1]
+        previous = prices[-1 - lookback]
 
-        if len(r) < 5:
+        if (
+            current is None
+            or previous is None
+            or previous == 0
+        ):
             return None
 
-        mean = sum(r) / len(r)
-        var = sum((x - mean) ** 2 for x in r) / (len(r) - 1)
+        return (current / previous) - 1
 
-        return math.sqrt(var) * math.sqrt(252)
+    def trend_filter(self, ticker, ohlcv, closes):
 
-    # =========================================================
-    # MAIN
-    # =========================================================
+        sma = SMA(
+            ticker,
+            ohlcv,
+            length=210
+        )
+
+        if (
+            sma is None
+            or len(sma) == 0
+            or sma[-1] is None
+        ):
+            return False
+
+        return closes[-1] > sma[-1]
+
+    # ============================================================
+    # MAIN STRATEGY
+    # ============================================================
 
     def run(self, data):
 
+        allocation = {
+            ticker: 0.0
+            for ticker in self.tickers
+        }
+
         ohlcv = data["ohlcv"]
-        alloc = {t: 0.0 for t in self.tickers}
 
-        log(f"Data availability SPY={len([b for b in ohlcv if 'SPY' in b])} GLD={len([b for b in ohlcv if 'GLD' in b])}")
+        warmup = 252
 
-        if len(ohlcv) < 50:
-            log("Not enough data → flat")
-            return TargetAllocation(alloc)
+        if len(ohlcv) < warmup:
+            log("Insufficient warmup data")
+            return TargetAllocation(allocation)
 
-        # -----------------------------------------------------
-        # Price series
-        # -----------------------------------------------------
-        px = {t: self.closes(ohlcv, t) for t in self.tickers}
+        # ========================================================
+        # CPI DATA
+        # ========================================================
 
-        # -----------------------------------------------------
-        # Macro regime (NO SMA ON DERIVED SERIES)
-        # -----------------------------------------------------
-        spy_m = self.monthly(px["SPY"])
-        gld_m = self.monthly(px["GLD"])
+        median_cpi_data = data.get(("median_cpi",))
 
-        if len(spy_m) < 6:
-            log("Macro insufficient → SHY")
-            alloc["SHY"] = 1.0
-            return TargetAllocation(alloc)
+        latest_cpi = None
 
-        ratio = []
-        for i in range(min(len(spy_m), len(gld_m))):
-            ratio.append(spy_m[i] / gld_m[i] if gld_m[i] != 0 else 0)
+        if (
+            median_cpi_data
+            and len(median_cpi_data) > 0
+        ):
+            latest_cpi = median_cpi_data[-1]["value"]
 
-        # manual SMA (FIX)
-        window = min(6, len(ratio))
-        ratio_sma = sum(ratio[-window:]) / window
+        inflation_on = False
 
-        risk_on = ratio[-1] > ratio_sma
+        if latest_cpi is not None:
+            inflation_on = latest_cpi > 4
 
-        log(f"RiskOn={risk_on} ratio={ratio[-1]:.3f} sma={ratio_sma:.3f}")
+        # ========================================================
+        # CLOSE PRICES
+        # ========================================================
 
-        # -----------------------------------------------------
-        # CPI (correct API)
-        # -----------------------------------------------------
-        cpi = data.get(("median_cpi",))
-        inflation = cpi[-1]["value"] if cpi else 2.5
+        closes = {}
 
-        inflation_high = inflation > 3.5
-        log(f"CPI={inflation:.2f} high={inflation_high}")
+        for ticker in self.tickers:
 
-        # -----------------------------------------------------
-        # Momentum
-        # -----------------------------------------------------
-        mom = {t: self.mom6(px[t]) for t in self.tickers}
+            try:
 
-        # -----------------------------------------------------
-        # Trend filter (CORRECT EMA/SMA USAGE)
-        # -----------------------------------------------------
-        def trend(t):
-            if len(px[t]) < 120:
-                return False
-            ema = EMA(t, ohlcv, 100)
-            if ema is None:
-                return False
-            return px[t][-1] > ema[-1]
+                closes[ticker] = [
+                    bar[ticker]["close"]
+                    for bar in ohlcv
+                    if (
+                        ticker in bar
+                        and bar[ticker]["close"] is not None
+                    )
+                ]
 
-        # -----------------------------------------------------
-        # Decision
-        # -----------------------------------------------------
-        selected = None
+            except Exception:
 
-        if risk_on:
+                closes[ticker] = []
 
-            if mom["CWB"] and mom["HYG"] and mom["CWB"] > mom["HYG"] and trend("CWB"):
-                selected = "CWB"
-            else:
-                selected = "HYG"
+        # Ensure all assets have enough history
+        for ticker in self.tickers:
 
-            log(f"RiskOn → {selected}")
+            if len(closes[ticker]) < warmup:
+
+                log(f"Not enough data for {ticker}")
+
+                return TargetAllocation(allocation)
+
+        # ========================================================
+        # SPY / GLD RATIO FILTER
+        # ========================================================
+
+        monthly_step = 21
+
+        try:
+
+            current_ratio = (
+                closes["SPY"][-1] /
+                closes["GLD"][-1]
+            )
+
+            ratio_history = []
+
+            for i in range(12):
+
+                idx = -(i + 1) * monthly_step
+
+                ratio = (
+                    closes["SPY"][idx] /
+                    closes["GLD"][idx]
+                )
+
+                ratio_history.append(ratio)
+
+            ratio_sma = (
+                sum(ratio_history) /
+                len(ratio_history)
+            )
+
+            risk_on = current_ratio > ratio_sma
+
+        except Exception:
+
+            log("Ratio filter failed")
+
+            risk_on = False
+
+        # ========================================================
+        # TREND FILTERS
+        # ========================================================
+
+        spy_bull = self.trend_filter(
+            "SPY",
+            ohlcv,
+            closes["SPY"]
+        )
+
+        tlt_bull = self.trend_filter(
+            "TLT",
+            ohlcv,
+            closes["TLT"]
+        )
+
+        cwb_bull = self.trend_filter(
+            "CWB",
+            ohlcv,
+            closes["CWB"]
+        )
+
+        hyg_bull = self.trend_filter(
+            "HYG",
+            ohlcv,
+            closes["HYG"]
+        )
+
+        # ========================================================
+        # MOMENTUM
+        # ========================================================
+
+        lookback = 126
+
+        cwb_ret = self.compute_return(
+            closes["CWB"],
+            lookback
+        )
+
+        hyg_ret = self.compute_return(
+            closes["HYG"],
+            lookback
+        )
+
+        tlt_ret = self.compute_return(
+            closes["TLT"],
+            lookback
+        )
+
+        ief_ret = self.compute_return(
+            closes["IEF"],
+            lookback
+        )
+
+        tip_ret = self.compute_return(
+            closes["TIP"],
+            lookback
+        )
+
+        shy_ret = self.compute_return(
+            closes["SHY"],
+            lookback
+        )
+
+        # ========================================================
+        # RISK ASSET
+        # ========================================================
+
+        if (
+            cwb_ret is not None
+            and hyg_ret is not None
+            and cwb_ret > hyg_ret
+            and cwb_bull
+        ):
+
+            risk_asset = "CWB"
 
         else:
 
-            if inflation_high:
+            risk_asset = "HYG"
 
-                selected = "TIP" if (mom["TIP"] and mom["TIP"] > mom["SHY"]) else "SHY"
+        # ========================================================
+        # DEFENSIVE ASSET
+        # ========================================================
+
+        if inflation_on:
+
+            if (
+                tip_ret is not None
+                and shy_ret is not None
+                and tip_ret > shy_ret
+            ):
+
+                defensive_asset = "TIP"
 
             else:
 
-                selected = "TLT" if (mom["TLT"] and mom["IEF"] and trend("TLT") and mom["TLT"] > mom["IEF"]) else "IEF"
+                defensive_asset = "SHY"
 
-            log(f"Defensive → {selected}")
-
-        # -----------------------------------------------------
-        # Vol targeting
-        # -----------------------------------------------------
-        vol = self.vol20(px[selected])
-
-        if not vol:
-            exposure = 1.0
         else:
-            exposure = min(1.0, max(0.0, 0.10 / vol))
 
-        alloc[selected] = exposure
+            if (
+                tlt_ret is not None
+                and ief_ret is not None
+                and tlt_ret > ief_ret
+                and tlt_bull
+            ):
 
-        log(f"FINAL {selected} vol={vol} exp={exposure:.3f}")
+                defensive_asset = "TLT"
 
-        return TargetAllocation(alloc)
+            else:
+
+                defensive_asset = "IEF"
+
+        # ========================================================
+        # FINAL SELECTION
+        # ========================================================
+
+        if risk_on and spy_bull:
+
+            selected_asset = risk_asset
+
+            log(f"Risk-on regime: {selected_asset}")
+
+        else:
+
+            selected_asset = defensive_asset
+
+            log(f"Defensive regime: {selected_asset}")
+
+        # ========================================================
+        # VOLATILITY TARGETING
+        # ========================================================
+
+        leverage = 0.0
+
+        try:
+
+            stdev = STDEV(
+                selected_asset,
+                ohlcv,
+                length=self.vol_lookback
+            )
+
+            if (
+                stdev is not None
+                and len(stdev) > 0
+                and stdev[-1] is not None
+            ):
+
+                realized_vol = (
+                    (
+                        stdev[-1] /
+                        closes[selected_asset][-1]
+                    )
+                    * (252 ** 0.5)
+                )
+
+                if realized_vol > 0:
+
+                    leverage = (
+                        self.target_vol /
+                        realized_vol
+                    )
+
+                    leverage = max(
+                        self.min_leverage,
+                        min(
+                            leverage,
+                            self.max_leverage
+                        )
+                    )
+
+        except Exception as e:
+
+            log(f"Vol targeting error: {e}")
+
+            leverage = 0.0
+
+        # ========================================================
+        # FINAL ALLOCATION
+        # ========================================================
+
+        allocation[selected_asset] = round(leverage, 4)
+
+        total_alloc = sum(allocation.values())
+
+        if total_alloc > 1:
+
+            allocation = {
+                k: v / total_alloc
+                for k, v in allocation.items()
+            }
+
+        log(f"Selected asset: {selected_asset}")
+        log(f"CPI: {latest_cpi}")
+        log(f"Leverage: {leverage}")
+
+        return TargetAllocation(allocation)
