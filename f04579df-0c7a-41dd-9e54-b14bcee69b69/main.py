@@ -1,11 +1,17 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import EMA, ATR
+from surmount.technical_indicators import SMA, EMA
+from surmount.data import MedianCPI
 from surmount.logging import log
+import math
+
 
 class TradingStrategy(Strategy):
+
     def __init__(self):
-        # Long-only basket of ETFs
-        self.tickers = ["QQQ", "SPY", "SMH", "GLD"]
+        self.tickers = [
+            "CWB", "HYG", "TLT", "IEF", "TIP", "SHY", "SPY", "GLD"
+        ]
+        self.data_list = [MedianCPI()]
 
     @property
     def assets(self):
@@ -13,83 +19,152 @@ class TradingStrategy(Strategy):
 
     @property
     def interval(self):
-        # 1-hour bars to capture the opening range
-        return "1hour"
+        return "1day"
+
+    @property
+    def data(self):
+        return self.data_list
+
+    # =========================================================
+    # Helpers
+    # =========================================================
+
+    def closes(self, ohlcv, ticker):
+        return [b[ticker]["close"] for b in ohlcv if ticker in b]
+
+    def monthly(self, series):
+        return series[::21] if len(series) > 21 else series
+
+    def mom6(self, series):
+        lb = 126
+        if len(series) < lb + 1:
+            return None
+        return (series[-1] / series[-lb]) - 1
+
+    def vol20(self, series):
+        if len(series) < 22:
+            return None
+
+        r = []
+        for i in range(-20, 0):
+            if series[i - 1] == 0:
+                continue
+            r.append(series[i] / series[i - 1] - 1)
+
+        if len(r) < 5:
+            return None
+
+        mean = sum(r) / len(r)
+        var = sum((x - mean) ** 2 for x in r) / (len(r) - 1)
+
+        return math.sqrt(var) * math.sqrt(252)
+
+    # =========================================================
+    # MAIN
+    # =========================================================
 
     def run(self, data):
+
         ohlcv = data["ohlcv"]
-        allocation_dict = {ticker: 0 for ticker in self.tickers}
-        
-        # Ensure we have enough data for a 200-period EMA
-        if len(ohlcv) < 100:
-            return TargetAllocation(allocation_dict)
+        alloc = {t: 0.0 for t in self.tickers}
 
-        # Strategy Parameters
-        stop_atr_multiplier = 2.0  # From Section 3: stop_atr
-        target_R = 2.0             # Reward to risk ratio
-        portfolio_risk = 0.02      # Risk 2% of portfolio per trade
-        
-        # --- 1. END OF DAY FLATTEN ---
-        current_time_str = ohlcv[-1][self.tickers[0]]["date"]
-        if "15:30" in current_time_str or "16:00" in current_time_str:
-            return TargetAllocation(allocation_dict)
+        log(f"Data availability SPY={len([b for b in ohlcv if 'SPY' in b])} GLD={len([b for b in ohlcv if 'GLD' in b])}")
 
-        active_signals = []
+        if len(ohlcv) < 50:
+            log("Not enough data → flat")
+            return TargetAllocation(alloc)
 
-        for ticker in self.tickers:
-            # 2. TREND FILTER (200 EMA)
-            ema_200 = EMA(ticker, ohlcv, 100)
-            # 3. VOLATILITY MEASURE (14-period ATR)
-            atr_values = ATR(ticker, ohlcv, 14)
-            
-            if ema_200 is None or atr_values is None:
-                continue
-                
-            # IDENTIFY TODAY'S OPENING RANGE (The 09:30 candle)
-            today_str = current_time_str.split(" ")[0]
-            first_candle = None
-            for i in range(1, 10):
-                if today_str in ohlcv[-i][ticker]["date"] and "09:30" in ohlcv[-i][ticker]["date"]:
-                    first_candle = ohlcv[-i][ticker]
-                    break
-            
-            if first_candle is None:
-                continue
+        # -----------------------------------------------------
+        # Price series
+        # -----------------------------------------------------
+        px = {t: self.closes(ohlcv, t) for t in self.tickers}
 
-            current_price = ohlcv[-1][ticker]["close"]
-            entry_price = ohlcv[-1][ticker]["open"]
-            
-            # 4. ENTRY CONDITIONS (LONG ONLY)
-            # - Price above 200 EMA
-            # - Opening hour candle is bullish (Close > Open)
-            # - Current price is not already at the end of the day
-            if current_price > ema_200[-1] and first_candle["close"] > first_candle["open"]:
-                
-                # ATR% Calculation: (ATR / Open) lagged
-                # Using index -2 for ATR and the opening range candle's open
-                atr_percent = atr_values[-2] / first_candle["open"] if first_candle["open"] != 0 else 0
-                
-                # STOP WIDTH LOGIC: stop_atr * ATR% * (intraday open / entry)
-                # We use the Opening Range open as the "intraday open"
-                stop_width_pct = stop_atr_multiplier * atr_percent * (first_candle["open"] / entry_price)
-                
-                stop_price = entry_price * (1 - stop_width_pct)
-                target_price = entry_price * (1 + (stop_width_pct * target_R))
+        # -----------------------------------------------------
+        # Macro regime (NO SMA ON DERIVED SERIES)
+        # -----------------------------------------------------
+        spy_m = self.monthly(px["SPY"])
+        gld_m = self.monthly(px["GLD"])
 
-                # 5. EXECUTION & RISK SIZING
-                # Only allocate if we haven't hit the stop or target
-                if current_price > stop_price and current_price < target_price:
-                    # Size based on distance to stop (risk parity)
-                    # Calculation: Risk Amount / Distance to Stop
-                    raw_allocation = portfolio_risk / stop_width_pct if stop_width_pct > 0 else 0
-                    active_signals.append({"ticker": ticker, "size": raw_allocation})
+        if len(spy_m) < 6:
+            log("Macro insufficient → SHY")
+            alloc["SHY"] = 1.0
+            return TargetAllocation(alloc)
 
-        # 6. PORTFOLIO CONSTRUCTION
-        # Normalize allocations so the sum doesn't exceed 1.0 (100% margin)
-        total_size = sum(s["size"] for s in active_signals)
-        if total_size > 0:
-            multiplier = min(1.0, 1.0 / total_size)
-            for signal in active_signals:
-                allocation_dict[signal["ticker"]] = signal["size"] * multiplier
+        ratio = []
+        for i in range(min(len(spy_m), len(gld_m))):
+            ratio.append(spy_m[i] / gld_m[i] if gld_m[i] != 0 else 0)
 
-        return TargetAllocation(allocation_dict)
+        # manual SMA (FIX)
+        window = min(6, len(ratio))
+        ratio_sma = sum(ratio[-window:]) / window
+
+        risk_on = ratio[-1] > ratio_sma
+
+        log(f"RiskOn={risk_on} ratio={ratio[-1]:.3f} sma={ratio_sma:.3f}")
+
+        # -----------------------------------------------------
+        # CPI (correct API)
+        # -----------------------------------------------------
+        cpi = data.get(("median_cpi",))
+        inflation = cpi[-1]["value"] if cpi else 2.5
+
+        inflation_high = inflation > 3.5
+        log(f"CPI={inflation:.2f} high={inflation_high}")
+
+        # -----------------------------------------------------
+        # Momentum
+        # -----------------------------------------------------
+        mom = {t: self.mom6(px[t]) for t in self.tickers}
+
+        # -----------------------------------------------------
+        # Trend filter (CORRECT EMA/SMA USAGE)
+        # -----------------------------------------------------
+        def trend(t):
+            if len(px[t]) < 120:
+                return False
+            ema = EMA(t, ohlcv, 100)
+            if ema is None:
+                return False
+            return px[t][-1] > ema[-1]
+
+        # -----------------------------------------------------
+        # Decision
+        # -----------------------------------------------------
+        selected = None
+
+        if risk_on:
+
+            if mom["CWB"] and mom["HYG"] and mom["CWB"] > mom["HYG"] and trend("CWB"):
+                selected = "CWB"
+            else:
+                selected = "HYG"
+
+            log(f"RiskOn → {selected}")
+
+        else:
+
+            if inflation_high:
+
+                selected = "TIP" if (mom["TIP"] and mom["TIP"] > mom["SHY"]) else "SHY"
+
+            else:
+
+                selected = "TLT" if (mom["TLT"] and mom["IEF"] and trend("TLT") and mom["TLT"] > mom["IEF"]) else "IEF"
+
+            log(f"Defensive → {selected}")
+
+        # -----------------------------------------------------
+        # Vol targeting
+        # -----------------------------------------------------
+        vol = self.vol20(px[selected])
+
+        if not vol:
+            exposure = 1.0
+        else:
+            exposure = min(1.0, max(0.0, 0.10 / vol))
+
+        alloc[selected] = exposure
+
+        log(f"FINAL {selected} vol={vol} exp={exposure:.3f}")
+
+        return TargetAllocation(alloc)
