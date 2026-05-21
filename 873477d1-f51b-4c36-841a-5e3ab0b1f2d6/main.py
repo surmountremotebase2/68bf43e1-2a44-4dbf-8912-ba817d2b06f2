@@ -140,7 +140,7 @@ class TradingStrategy(Strategy):
         # Minimum History Check
         # ========================================================
 
-        if len(ohlcv) < 260:
+        if len(ohlcv) < 1:
             log("Insufficient historical data")
             return TargetAllocation(allocations)
 
