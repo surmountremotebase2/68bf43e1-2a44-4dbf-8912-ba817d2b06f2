@@ -1,36 +1,17 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.logging import log
+from surmount.technical_indicators import SMA
 from surmount.data import MedianCPI
+from surmount.logging import log
 import math
 
 
 class TradingStrategy(Strategy):
-    """
-    FixedIncomeBeat500
-
-    Tactical fixed income rotation strategy using:
-    - Macro regime detection
-    - Trend following
-    - Relative strength rotation
-    - Inflation filtering
-    - Volatility targeting
-    """
 
     def __init__(self):
         self.tickers = [
-            "CWB",
-            "HYG",
-            "TLT",
-            "IEF",
-            "TIP",
-            "SHY",
-            "SPY",
-            "GLD"
+            "CWB", "HYG", "TLT", "IEF", "TIP", "SHY", "SPY", "GLD"
         ]
-
-        self.data_list = [
-            MedianCPI()
-        ]
+        self.data_list = [MedianCPI()]
 
     @property
     def assets(self):
@@ -44,344 +25,171 @@ class TradingStrategy(Strategy):
     def data(self):
         return self.data_list
 
-    # ============================================================
-    # Helper Functions
-    # ============================================================
+    # =========================================================
+    # Helpers
+    # =========================================================
 
-    def get_close_series(self, ohlcv_data, ticker):
-        closes = []
+    def closes(self, ohlcv, ticker):
+        return [bar[ticker]["close"] for bar in ohlcv if ticker in bar]
 
-        for bar in ohlcv_data:
-            if ticker in bar and "close" in bar[ticker]:
-                closes.append(bar[ticker]["close"])
+    def monthly(self, series):
+        return series[::21] if len(series) > 21 else series
 
-        return closes
+    def mom6(self, series):
+        lookback = 126
+        if len(series) < lookback + 1:
+            return None
+        return (series[-1] / series[-lookback]) - 1
 
-    def sma(self, values, length):
-        if len(values) < length:
+    def vol20(self, series):
+        if len(series) < 22:
             return None
 
-        return sum(values[-length:]) / length
-
-    def monthly_series(self, daily_values):
-        """
-        Approximate monthly closes using 21 trading days.
-        """
-        monthly = []
-
-        for i in range(20, len(daily_values), 21):
-            monthly.append(daily_values[i])
-
-        return monthly
-
-    def momentum_return(self, values, months=6):
-        """
-        6-month momentum approximation.
-        """
-        lookback = months * 21
-
-        if len(values) < lookback + 1:
-            return None
-
-        current = values[-1]
-        past = values[-lookback]
-
-        if past == 0:
-            return None
-
-        return (current / past) - 1
-
-    def annualized_volatility(self, values, lookback=20):
-        """
-        20-day annualized realized volatility.
-        """
-
-        if len(values) < lookback + 1:
-            return None
-
-        returns = []
-
-        for i in range(-lookback, 0):
-            prev_close = values[i - 1]
-            curr_close = values[i]
-
-            if prev_close == 0:
+        rets = []
+        for i in range(-20, 0):
+            if series[i - 1] == 0:
                 continue
+            rets.append(series[i] / series[i - 1] - 1)
 
-            daily_return = (curr_close / prev_close) - 1
-            returns.append(daily_return)
-
-        if len(returns) < 2:
+        if len(rets) < 5:
             return None
 
-        mean_return = sum(returns) / len(returns)
+        mean = sum(rets) / len(rets)
+        var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
 
-        variance = sum(
-            (r - mean_return) ** 2 for r in returns
-        ) / (len(returns) - 1)
+        return math.sqrt(var) * math.sqrt(252)
 
-        daily_vol = math.sqrt(variance)
-
-        return daily_vol * math.sqrt(252)
-
-    # ============================================================
-    # Main Strategy Logic
-    # ============================================================
+    # =========================================================
+    # Main
+    # =========================================================
 
     def run(self, data):
 
-        allocations = {
-            ticker: 0.0 for ticker in self.tickers
-        }
-
         ohlcv = data["ohlcv"]
+        allocations = {t: 0.0 for t in self.tickers}
 
-        # ========================================================
-        # Minimum History Check
-        # ========================================================
-
-        if len(ohlcv) < 1:
-            log("Insufficient historical data")
+        if len(ohlcv) < 50:
+            log("Not enough OHLCV data → flat allocation")
             return TargetAllocation(allocations)
 
-        # ========================================================
-        # Load Price Series
-        # ========================================================
+        # ---------------------------------------------------------
+        # Price series
+        # ---------------------------------------------------------
+        px = {}
+        for t in self.tickers:
+            px[t] = self.closes(ohlcv, t)
 
-        prices = {}
+        log(f"Data availability SPY={len(px['SPY'])} GLD={len(px['GLD'])}")
 
-        minimum_history = 1
+        # ---------------------------------------------------------
+        # Macro regime SPY/GLD
+        # ---------------------------------------------------------
+        spy_m = self.monthly(px["SPY"])
+        gld_m = self.monthly(px["GLD"])
 
-        for ticker in self.tickers:
-
-            closes = self.get_close_series(ohlcv, ticker)
-
-            if len(closes) < minimum_history:
-                log(f"Limited history for {ticker}: {len(closes)} bars")
-
-            prices[ticker] = closes
-
-        # ========================================================
-        # Monthly Macro Regime Detection
-        # ========================================================
-
-        spy_monthly = self.monthly_series(prices["SPY"])
-        gld_monthly = self.monthly_series(prices["GLD"])
-
-        if len(spy_monthly) < 1:
-            log("Insufficient monthly history")
+        if len(spy_m) < 5 or len(gld_m) < 5:
+            log("Insufficient macro monthly data → default SHY")
+            allocations["SHY"] = 1.0
             return TargetAllocation(allocations)
 
-        ratio_series = []
+        ratio = [
+            spy_m[i] / gld_m[i] if gld_m[i] != 0 else 0
+            for i in range(min(len(spy_m), len(gld_m)))
+        ]
 
-        for i in range(len(spy_monthly)):
+        ratio_sma = SMA(ratio, 6)
 
-            if gld_monthly[i] == 0:
-                ratio_series.append(0)
-            else:
-                ratio_series.append(
-                    spy_monthly[i] / gld_monthly[i]
-                )
-
-        ratio_sma_12 = self.sma(ratio_series, 12)
-
-        if ratio_sma_12 is None:
+        if ratio_sma is None:
+            log("Ratio SMA unavailable → SHY fallback")
+            allocations["SHY"] = 1.0
             return TargetAllocation(allocations)
 
-        current_ratio = ratio_series[-1]
+        risk_on = ratio[-1] > ratio_sma[-1]
 
-        risk_on_macro = current_ratio > ratio_sma_12
+        log(f"RiskOn={risk_on} ratio={ratio[-1]:.3f} sma={ratio_sma[-1]:.3f}")
 
-        # ========================================================
-        # SPY Trend Filter
-        # ========================================================
-
-        spy_sma_10 = self.sma(spy_monthly, 10)
-
-        if spy_sma_10 is None:
-            return TargetAllocation(allocations)
-
-        spy_trend = spy_monthly[-1] > spy_sma_10
-
-        # ========================================================
-        # Additional Trend Filters
-        # ========================================================
-
-        def trend_filter(ticker):
-
-            monthly_prices = self.monthly_series(
-                prices[ticker]
-            )
-
-            sma_10 = self.sma(monthly_prices, 10)
-
-            if sma_10 is None:
-                return False
-
-            return monthly_prices[-1] > sma_10
-
-        cwb_trend = trend_filter("CWB")
-        tlt_trend = trend_filter("TLT")
-
-        # ========================================================
-        # Relative Strength Momentum
-        # ========================================================
-
-        momentum = {}
-
-        for ticker in [
-            "CWB",
-            "HYG",
-            "TLT",
-            "IEF",
-            "TIP",
-            "SHY"
-        ]:
-
-            momentum[ticker] = self.momentum_return(
-                prices[ticker],
-                months=6
-            )
-
-        # ========================================================
-        # Inflation Regime
-        # ========================================================
-
-        median_cpi_data = data.get(("median_cpi",))
-
-        if (
-            not median_cpi_data
-            or len(median_cpi_data) < 1
-        ):
-            log("Missing CPI data")
-            inflation_value = 2.5
+        # ---------------------------------------------------------
+        # CPI via MedianCPI (CORRECT METHOD)
+        # ---------------------------------------------------------
+        cpi_data = data.get(("median_cpi",))
+        if not cpi_data:
+            inflation = 2.5
+            log("Missing CPI → default 2.5")
         else:
-            inflation_value = median_cpi_data[-1]["value"]
+            inflation = cpi_data[-1]["value"]
 
-        inflationary_regime = inflation_value > 3.5
+        inflation_regime = inflation > 3.5
+        log(f"Inflation={inflation:.2f} High={inflation_regime}")
 
-        # ========================================================
-        # Risk-On Detection
-        # ========================================================
+        # ---------------------------------------------------------
+        # Momentum
+        # ---------------------------------------------------------
+        mom = {t: self.mom6(px[t]) for t in self.tickers}
 
-        risk_on = risk_on_macro and spy_trend
+        # ---------------------------------------------------------
+        # Trend filters via SMA (SURMOUNT)
+        # ---------------------------------------------------------
+        def trend(t):
+            if len(px[t]) < 30:
+                return False
+            sma = SMA(px[t], 10)
+            if sma is None:
+                return False
+            return px[t][-1] > sma[-1]
 
-        selected_asset = None
-
-        # ========================================================
-        # Risk-On Allocation Logic
-        # ========================================================
+        # ---------------------------------------------------------
+        # Decision engine
+        # ---------------------------------------------------------
+        selected = None
 
         if risk_on:
 
-            cwb_mom = momentum["CWB"]
-            hyg_mom = momentum["HYG"]
-
-            if (
-                cwb_mom is not None
-                and hyg_mom is not None
-                and cwb_mom > hyg_mom
-                and cwb_trend
-            ):
-
-                selected_asset = "CWB"
-
+            cwb_ok = trend("CWB")
+            if mom["CWB"] and mom["HYG"] and mom["CWB"] > mom["HYG"] and cwb_ok:
+                selected = "CWB"
             else:
-                selected_asset = "HYG"
+                selected = "HYG"
 
-            log(
-                f"Risk-On regime | "
-                f"Selected asset: {selected_asset}"
-            )
-
-        # ========================================================
-        # Defensive Allocation Logic
-        # ========================================================
+            log(f"Risk-On → {selected}")
 
         else:
 
-            # --------------------------------------------
-            # Inflationary Regime
-            # --------------------------------------------
+            if inflation_regime:
 
-            if inflationary_regime:
-
-                tip_mom = momentum["TIP"]
-                shy_mom = momentum["SHY"]
-
-                if (
-                    tip_mom is not None
-                    and shy_mom is not None
-                    and tip_mom > shy_mom
-                ):
-
-                    selected_asset = "TIP"
-
+                if mom["TIP"] and mom["SHY"] and mom["TIP"] > mom["SHY"]:
+                    selected = "TIP"
                 else:
-                    selected_asset = "SHY"
+                    selected = "SHY"
 
-                log(
-                    f"Inflationary regime | "
-                    f"Selected asset: {selected_asset}"
-                )
-
-            # --------------------------------------------
-            # Disinflationary Regime
-            # --------------------------------------------
+                log(f"Inflation defense → {selected}")
 
             else:
 
-                tlt_mom = momentum["TLT"]
-                ief_mom = momentum["IEF"]
+                tlt_ok = trend("TLT")
 
-                if (
-                    tlt_mom is not None
-                    and ief_mom is not None
-                    and tlt_trend
-                    and tlt_mom > ief_mom
-                ):
-
-                    selected_asset = "TLT"
-
+                if mom["TLT"] and mom["IEF"] and tlt_ok and mom["TLT"] > mom["IEF"]:
+                    selected = "TLT"
                 else:
-                    selected_asset = "IEF"
+                    selected = "IEF"
 
-                log(
-                    f"Disinflationary regime | "
-                    f"Selected asset: {selected_asset}"
-                )
+                log(f"Duration regime → {selected}")
 
-        # ========================================================
-        # Volatility Targeting
-        # ========================================================
+        # ---------------------------------------------------------
+        # Vol targeting
+        # ---------------------------------------------------------
+        vol = self.vol20(px[selected])
 
-        target_vol = 0.10
-
-        realized_vol = self.annualized_volatility(
-            prices[selected_asset],
-            lookback=20
-        )
-
-        if realized_vol is None or realized_vol <= 0:
+        if not vol or vol == 0:
             exposure = 1.0
         else:
-            exposure = target_vol / realized_vol
+            exposure = min(1.0, max(0.0, 0.10 / vol))
 
-        # Exposure clipped between 0% and 100%
-        exposure = max(0.0, min(1.0, exposure))
-
-        # ========================================================
-        # Final Portfolio Allocation
-        # ========================================================
-
-        allocations[selected_asset] = exposure
+        allocations[selected] = exposure
 
         log(
-            f"Asset={selected_asset} | "
-            f"Inflation={round(inflation_value, 2)} | "
-            f"RiskOn={risk_on} | "
-            f"Vol={round(realized_vol, 4) if realized_vol else 'N/A'} | "
-            f"Exposure={round(exposure, 4)}"
+            f"FINAL → {selected} | "
+            f"vol={vol:.4f if vol else None} | "
+            f"exp={exposure:.3f}"
         )
 
         return TargetAllocation(allocations)
