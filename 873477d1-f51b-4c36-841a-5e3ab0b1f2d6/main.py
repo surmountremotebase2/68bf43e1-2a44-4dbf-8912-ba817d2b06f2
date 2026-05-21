@@ -1,5 +1,5 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import SMA
+from surmount.technical_indicators import SMA, EMA
 from surmount.data import MedianCPI
 from surmount.logging import log
 import math
@@ -30,166 +30,141 @@ class TradingStrategy(Strategy):
     # =========================================================
 
     def closes(self, ohlcv, ticker):
-        return [bar[ticker]["close"] for bar in ohlcv if ticker in bar]
+        return [b[ticker]["close"] for b in ohlcv if ticker in b]
 
     def monthly(self, series):
         return series[::21] if len(series) > 21 else series
 
     def mom6(self, series):
-        lookback = 126
-        if len(series) < lookback + 1:
+        lb = 126
+        if len(series) < lb + 1:
             return None
-        return (series[-1] / series[-lookback]) - 1
+        return (series[-1] / series[-lb]) - 1
 
     def vol20(self, series):
         if len(series) < 22:
             return None
 
-        rets = []
+        r = []
         for i in range(-20, 0):
             if series[i - 1] == 0:
                 continue
-            rets.append(series[i] / series[i - 1] - 1)
+            r.append(series[i] / series[i - 1] - 1)
 
-        if len(rets) < 5:
+        if len(r) < 5:
             return None
 
-        mean = sum(rets) / len(rets)
-        var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+        mean = sum(r) / len(r)
+        var = sum((x - mean) ** 2 for x in r) / (len(r) - 1)
 
         return math.sqrt(var) * math.sqrt(252)
 
     # =========================================================
-    # Main
+    # MAIN
     # =========================================================
 
     def run(self, data):
 
         ohlcv = data["ohlcv"]
-        allocations = {t: 0.0 for t in self.tickers}
+        alloc = {t: 0.0 for t in self.tickers}
+
+        log(f"Data availability SPY={len([b for b in ohlcv if 'SPY' in b])} GLD={len([b for b in ohlcv if 'GLD' in b])}")
 
         if len(ohlcv) < 50:
-            log("Not enough OHLCV data → flat allocation")
-            return TargetAllocation(allocations)
+            log("Not enough data → flat")
+            return TargetAllocation(alloc)
 
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
         # Price series
-        # ---------------------------------------------------------
-        px = {}
-        for t in self.tickers:
-            px[t] = self.closes(ohlcv, t)
+        # -----------------------------------------------------
+        px = {t: self.closes(ohlcv, t) for t in self.tickers}
 
-        log(f"Data availability SPY={len(px['SPY'])} GLD={len(px['GLD'])}")
-
-        # ---------------------------------------------------------
-        # Macro regime SPY/GLD
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
+        # Macro regime (NO SMA ON DERIVED SERIES)
+        # -----------------------------------------------------
         spy_m = self.monthly(px["SPY"])
         gld_m = self.monthly(px["GLD"])
 
-        if len(spy_m) < 5 or len(gld_m) < 5:
-            log("Insufficient macro monthly data → default SHY")
-            allocations["SHY"] = 1.0
-            return TargetAllocation(allocations)
+        if len(spy_m) < 6:
+            log("Macro insufficient → SHY")
+            alloc["SHY"] = 1.0
+            return TargetAllocation(alloc)
 
-        ratio = [
-            spy_m[i] / gld_m[i] if gld_m[i] != 0 else 0
-            for i in range(min(len(spy_m), len(gld_m)))
-        ]
+        ratio = []
+        for i in range(min(len(spy_m), len(gld_m))):
+            ratio.append(spy_m[i] / gld_m[i] if gld_m[i] != 0 else 0)
 
-        ratio_sma = SMA(ratio, 6)
+        # manual SMA (FIX)
+        window = min(6, len(ratio))
+        ratio_sma = sum(ratio[-window:]) / window
 
-        if ratio_sma is None:
-            log("Ratio SMA unavailable → SHY fallback")
-            allocations["SHY"] = 1.0
-            return TargetAllocation(allocations)
+        risk_on = ratio[-1] > ratio_sma
 
-        risk_on = ratio[-1] > ratio_sma[-1]
+        log(f"RiskOn={risk_on} ratio={ratio[-1]:.3f} sma={ratio_sma:.3f}")
 
-        log(f"RiskOn={risk_on} ratio={ratio[-1]:.3f} sma={ratio_sma[-1]:.3f}")
+        # -----------------------------------------------------
+        # CPI (correct API)
+        # -----------------------------------------------------
+        cpi = data.get(("median_cpi",))
+        inflation = cpi[-1]["value"] if cpi else 2.5
 
-        # ---------------------------------------------------------
-        # CPI via MedianCPI (CORRECT METHOD)
-        # ---------------------------------------------------------
-        cpi_data = data.get(("median_cpi",))
-        if not cpi_data:
-            inflation = 2.5
-            log("Missing CPI → default 2.5")
-        else:
-            inflation = cpi_data[-1]["value"]
+        inflation_high = inflation > 3.5
+        log(f"CPI={inflation:.2f} high={inflation_high}")
 
-        inflation_regime = inflation > 3.5
-        log(f"Inflation={inflation:.2f} High={inflation_regime}")
-
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
         # Momentum
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
         mom = {t: self.mom6(px[t]) for t in self.tickers}
 
-        # ---------------------------------------------------------
-        # Trend filters via SMA (SURMOUNT)
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
+        # Trend filter (CORRECT EMA/SMA USAGE)
+        # -----------------------------------------------------
         def trend(t):
-            if len(px[t]) < 30:
+            if len(px[t]) < 120:
                 return False
-            sma = SMA(px[t], 10)
-            if sma is None:
+            ema = EMA(t, ohlcv, 100)
+            if ema is None:
                 return False
-            return px[t][-1] > sma[-1]
+            return px[t][-1] > ema[-1]
 
-        # ---------------------------------------------------------
-        # Decision engine
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
+        # Decision
+        # -----------------------------------------------------
         selected = None
 
         if risk_on:
 
-            cwb_ok = trend("CWB")
-            if mom["CWB"] and mom["HYG"] and mom["CWB"] > mom["HYG"] and cwb_ok:
+            if mom["CWB"] and mom["HYG"] and mom["CWB"] > mom["HYG"] and trend("CWB"):
                 selected = "CWB"
             else:
                 selected = "HYG"
 
-            log(f"Risk-On → {selected}")
+            log(f"RiskOn → {selected}")
 
         else:
 
-            if inflation_regime:
+            if inflation_high:
 
-                if mom["TIP"] and mom["SHY"] and mom["TIP"] > mom["SHY"]:
-                    selected = "TIP"
-                else:
-                    selected = "SHY"
-
-                log(f"Inflation defense → {selected}")
+                selected = "TIP" if (mom["TIP"] and mom["TIP"] > mom["SHY"]) else "SHY"
 
             else:
 
-                tlt_ok = trend("TLT")
+                selected = "TLT" if (mom["TLT"] and mom["IEF"] and trend("TLT") and mom["TLT"] > mom["IEF"]) else "IEF"
 
-                if mom["TLT"] and mom["IEF"] and tlt_ok and mom["TLT"] > mom["IEF"]:
-                    selected = "TLT"
-                else:
-                    selected = "IEF"
+            log(f"Defensive → {selected}")
 
-                log(f"Duration regime → {selected}")
-
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
         # Vol targeting
-        # ---------------------------------------------------------
+        # -----------------------------------------------------
         vol = self.vol20(px[selected])
 
-        if not vol or vol == 0:
+        if not vol:
             exposure = 1.0
         else:
             exposure = min(1.0, max(0.0, 0.10 / vol))
 
-        allocations[selected] = exposure
+        alloc[selected] = exposure
 
-        log(
-            f"FINAL → {selected} | "
-            f"vol={vol:.4f if vol else None} | "
-            f"exp={exposure:.3f}"
-        )
+        log(f"FINAL {selected} vol={vol} exp={exposure:.3f}")
 
-        return TargetAllocation(allocations)
+        return TargetAllocation(alloc)
