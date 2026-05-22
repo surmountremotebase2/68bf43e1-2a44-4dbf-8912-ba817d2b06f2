@@ -1,7 +1,8 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import SMA, STDEV
+from surmount.technical_indicators import SMA
 from surmount.data import MedianCPI
 from surmount.logging import log
+import math
 
 
 class TradingStrategy(Strategy):
@@ -35,7 +36,7 @@ class TradingStrategy(Strategy):
         self.target_vol = 0.10
         self.vol_lookback = 64
         self.max_leverage = 1.0
-        self.min_leverage = 0.0
+        self.min_leverage = 0.25
 
     @property
     def assets(self):
@@ -87,6 +88,56 @@ class TradingStrategy(Strategy):
 
         return closes[-1] > sma[-1]
 
+    def calculate_realized_vol(
+        self,
+        prices,
+        lookback=64
+    ):
+        """
+        Manual realized volatility calculation.
+        """
+
+        if len(prices) < lookback + 1:
+            return None
+
+        returns = []
+
+        for i in range(-lookback, 0):
+
+            prev_price = prices[i - 1]
+            curr_price = prices[i]
+
+            if (
+                prev_price is None
+                or curr_price is None
+                or prev_price == 0
+            ):
+                continue
+
+            ret = (
+                curr_price / prev_price
+            ) - 1
+
+            returns.append(ret)
+
+        if len(returns) < 10:
+            return None
+
+        mean_ret = sum(returns) / len(returns)
+
+        variance = sum(
+            (r - mean_ret) ** 2
+            for r in returns
+        ) / len(returns)
+
+        daily_vol = math.sqrt(variance)
+
+        annualized_vol = (
+            daily_vol * math.sqrt(252)
+        )
+
+        return annualized_vol
+
     # ============================================================
     # MAIN STRATEGY
     # ============================================================
@@ -100,14 +151,16 @@ class TradingStrategy(Strategy):
 
         ohlcv = data["ohlcv"]
 
-        warmup = 1
+        warmup = 252
 
         if len(ohlcv) < warmup:
-            log("Insufficient warmup data")
+
+            log("Insufficient warmup")
+
             return TargetAllocation(allocation)
 
         # ========================================================
-        # CPI DATA
+        # CPI
         # ========================================================
 
         median_cpi_data = data.get(("median_cpi",))
@@ -118,15 +171,17 @@ class TradingStrategy(Strategy):
             median_cpi_data
             and len(median_cpi_data) > 0
         ):
+
             latest_cpi = median_cpi_data[-1]["value"]
 
         inflation_on = False
 
         if latest_cpi is not None:
+
             inflation_on = latest_cpi > 4
 
         # ========================================================
-        # CLOSE PRICES
+        # CLOSES
         # ========================================================
 
         closes = {}
@@ -148,20 +203,21 @@ class TradingStrategy(Strategy):
 
                 closes[ticker] = []
 
-        # Ensure all assets have enough history
+        # ========================================================
+        # DATA VALIDATION
+        # ========================================================
+
         for ticker in self.tickers:
 
             if len(closes[ticker]) < warmup:
 
-                log(f"Not enough data for {ticker}")
+                log(f"Not enough data: {ticker}")
 
                 return TargetAllocation(allocation)
 
         # ========================================================
-        # SPY / GLD RATIO FILTER
+        # SPY / GLD FILTER
         # ========================================================
-
-        monthly_step = 21
 
         try:
 
@@ -174,7 +230,7 @@ class TradingStrategy(Strategy):
 
             for i in range(12):
 
-                idx = -(i + 1) * monthly_step
+                idx = -(i + 1) * 21
 
                 ratio = (
                     closes["SPY"][idx] /
@@ -190,9 +246,9 @@ class TradingStrategy(Strategy):
 
             risk_on = current_ratio > ratio_sma
 
-        except Exception:
+        except Exception as e:
 
-            log("Ratio filter failed")
+            log(f"Ratio filter error: {e}")
 
             risk_on = False
 
@@ -216,12 +272,6 @@ class TradingStrategy(Strategy):
             "CWB",
             ohlcv,
             closes["CWB"]
-        )
-
-        hyg_bull = self.trend_filter(
-            "HYG",
-            ohlcv,
-            closes["HYG"]
         )
 
         # ========================================================
@@ -318,80 +368,55 @@ class TradingStrategy(Strategy):
 
             selected_asset = risk_asset
 
-            log(f"Risk-on regime: {selected_asset}")
-
         else:
 
             selected_asset = defensive_asset
 
-            log(f"Defensive regime: {selected_asset}")
-
         # ========================================================
-        # VOLATILITY TARGETING
+        # VOL TARGETING
         # ========================================================
 
-        leverage = 0.0
+        realized_vol = self.calculate_realized_vol(
+            closes[selected_asset],
+            self.vol_lookback
+        )
 
-        try:
+        if (
+            realized_vol is None
+            or realized_vol <= 0
+        ):
 
-            stdev = STDEV(
-                selected_asset,
-                ohlcv,
-                length=self.vol_lookback
+            leverage = self.min_leverage
+
+        else:
+
+            leverage = (
+                self.target_vol /
+                realized_vol
             )
 
-            if (
-                stdev is not None
-                and len(stdev) > 0
-                and stdev[-1] is not None
-            ):
-
-                realized_vol = (
-                    (
-                        stdev[-1] /
-                        closes[selected_asset][-1]
-                    )
-                    * (252 ** 0.5)
+            leverage = max(
+                self.min_leverage,
+                min(
+                    leverage,
+                    self.max_leverage
                 )
-
-                if realized_vol > 0:
-
-                    leverage = (
-                        self.target_vol /
-                        realized_vol
-                    )
-
-                    leverage = max(
-                        self.min_leverage,
-                        min(
-                            leverage,
-                            self.max_leverage
-                        )
-                    )
-
-        except Exception as e:
-
-            log(f"Vol targeting error: {e}")
-
-            leverage = 0.0
+            )
 
         # ========================================================
         # FINAL ALLOCATION
         # ========================================================
 
-        allocation[selected_asset] = round(leverage, 4)
+        allocation[selected_asset] = round(
+            leverage,
+            4
+        )
 
-        total_alloc = sum(allocation.values())
-
-        if total_alloc > 1:
-
-            allocation = {
-                k: v / total_alloc
-                for k, v in allocation.items()
-            }
-
+        log(f"CPI: {latest_cpi}")
+        log(f"Inflation regime: {inflation_on}")
+        log(f"Risk-on: {risk_on}")
         log(f"Selected asset: {selected_asset}")
-        #log(f"CPI: {latest_cpi}")
-        #log(f"Leverage: {leverage}")
+        log(f"Realized vol: {realized_vol}")
+        log(f"Leverage: {leverage}")
 
         return TargetAllocation(allocation)
