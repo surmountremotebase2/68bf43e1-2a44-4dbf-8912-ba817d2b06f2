@@ -391,7 +391,7 @@ class TradingStrategy(Strategy):
             }
 
         log(f"Selected asset: {selected_asset}")
-        log(f"CPI: {latest_cpi}")
-        log(f"Leverage: {leverage}")
+        #log(f"CPI: {latest_cpi}")
+        #log(f"Leverage: {leverage}")
 
         return TargetAllocation(allocation)
