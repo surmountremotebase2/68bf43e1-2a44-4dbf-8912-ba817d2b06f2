@@ -38,7 +38,7 @@ class TradingStrategy(Strategy):
         self.max_leverage = 1.0
         self.min_leverage = 0.25
 
-        self.warmup = 252
+        self.warmup = 1
 
     @property
     def assets(self):
