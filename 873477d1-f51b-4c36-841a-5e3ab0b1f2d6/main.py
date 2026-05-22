@@ -151,7 +151,7 @@ class TradingStrategy(Strategy):
 
         ohlcv = data["ohlcv"]
 
-        warmup = 252
+        warmup = 1
 
         if len(ohlcv) < warmup:
 
