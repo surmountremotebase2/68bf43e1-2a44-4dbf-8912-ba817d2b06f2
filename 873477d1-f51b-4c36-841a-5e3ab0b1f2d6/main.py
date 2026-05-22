@@ -20,15 +20,6 @@ class TradingStrategy(Strategy):
             "SHY"
         ]
 
-        self.trading_assets = [
-            "CWB",
-            "HYG",
-            "TLT",
-            "IEF",
-            "TIP",
-            "SHY"
-        ]
-
         self.data_list = [
             MedianCPI()
         ]
@@ -37,8 +28,7 @@ class TradingStrategy(Strategy):
         self.vol_lookback = 64
         self.max_leverage = 1.0
         self.min_leverage = 0.25
-
-        self.warmup = 1
+        self.warmup = 2
 
     @property
     def assets(self):
@@ -59,7 +49,7 @@ class TradingStrategy(Strategy):
     def compute_return(self, prices, lookback):
 
         if len(prices) <= lookback:
-            return None
+            return 0.0
 
         current = prices[-1]
         previous = prices[-1 - lookback]
@@ -69,29 +59,35 @@ class TradingStrategy(Strategy):
             or previous is None
             or previous == 0
         ):
-            return None
+            return 0.0
 
         return (current / previous) - 1
 
     def trend_filter(self, ticker, ohlcv, closes):
 
-        sma = SMA(
-            ticker,
-            ohlcv,
-            length=210
-        )
+        try:
 
-        if (
-            sma is None
-            or len(sma) == 0
-            or sma[-1] is None
-        ):
+            sma = SMA(
+                ticker,
+                ohlcv,
+                length=210
+            )
+
+            if (
+                sma is None
+                or len(sma) == 0
+                or sma[-1] is None
+            ):
+                return False
+
+            if len(closes) == 0:
+                return False
+
+            return closes[-1] > sma[-1]
+
+        except Exception:
+
             return False
-
-        if len(closes) == 0:
-            return False
-
-        return closes[-1] > sma[-1]
 
     def calculate_realized_vol(
         self,
@@ -99,50 +95,63 @@ class TradingStrategy(Strategy):
         lookback=64
     ):
 
-        if len(prices) < lookback + 1:
-            return None
+        try:
 
-        returns = []
+            if len(prices) < lookback + 1:
+                return None
 
-        start_idx = len(prices) - lookback
+            returns = []
 
-        for i in range(start_idx, len(prices)):
+            start_idx = len(prices) - lookback
 
-            prev_price = prices[i - 1]
-            curr_price = prices[i]
+            for i in range(start_idx, len(prices)):
+
+                prev_price = prices[i - 1]
+                curr_price = prices[i]
+
+                if (
+                    prev_price is None
+                    or curr_price is None
+                    or prev_price <= 0
+                ):
+                    continue
+
+                daily_return = (
+                    curr_price / prev_price
+                ) - 1
+
+                returns.append(daily_return)
+
+            if len(returns) < 10:
+                return None
+
+            mean_return = (
+                sum(returns) / len(returns)
+            )
+
+            variance = sum(
+                (r - mean_return) ** 2
+                for r in returns
+            ) / len(returns)
+
+            daily_vol = math.sqrt(variance)
+
+            annualized_vol = (
+                daily_vol * math.sqrt(252)
+            )
 
             if (
-                prev_price is None
-                or curr_price is None
-                or prev_price == 0
+                annualized_vol <= 0
+                or math.isnan(annualized_vol)
+                or math.isinf(annualized_vol)
             ):
-                continue
+                return None
 
-            daily_return = (
-                curr_price / prev_price
-            ) - 1
+            return annualized_vol
 
-            returns.append(daily_return)
+        except Exception:
 
-        if len(returns) < 10:
             return None
-
-        mean_return = (
-            sum(returns) / len(returns)
-        )
-
-        variance = sum(
-            (r - mean_return) ** 2
-            for r in returns
-        ) / len(returns)
-
-        daily_vol = math.sqrt(variance)
-
-        annualized_vol = (
-            daily_vol * math.sqrt(252)
-        )
-
-        return annualized_vol
 
     # ============================================================
     # MAIN STRATEGY
@@ -155,116 +164,123 @@ class TradingStrategy(Strategy):
             for ticker in self.tickers
         }
 
-        ohlcv = data["ohlcv"]
+        try:
 
-        if len(ohlcv) < self.warmup:
+            ohlcv = data["ohlcv"]
 
-            log("Insufficient warmup data")
-
-            return TargetAllocation(allocation)
-
-        # ========================================================
-        # CPI DATA
-        # ========================================================
-
-        median_cpi_data = data.get(("median_cpi",))
-
-        latest_cpi = None
-
-        if (
-            median_cpi_data
-            and len(median_cpi_data) > 0
-        ):
-
-            latest_cpi = median_cpi_data[-1]["value"]
-
-        inflation_on = False
-
-        if latest_cpi is not None:
-
-            inflation_on = latest_cpi > 4
-
-        # ========================================================
-        # CLOSE PRICES
-        # ========================================================
-
-        closes = {}
-
-        for ticker in self.tickers:
-
-            closes[ticker] = []
-
-            try:
-
-                for bar in ohlcv:
-
-                    if (
-                        ticker in bar
-                        and bar[ticker]
-                        and "close" in bar[ticker]
-                    ):
-
-                        close_price = bar[ticker]["close"]
-
-                        if close_price is not None:
-
-                            closes[ticker].append(close_price)
-
-            except Exception as e:
-
-                log(f"Close extraction error {ticker}: {e}")
-
-        # ========================================================
-        # VALIDATION
-        # ========================================================
-
-        for ticker in self.tickers:
-
-            if len(closes[ticker]) < self.warmup:
-
-                log(f"Not enough history for {ticker}")
+            if len(ohlcv) < self.warmup:
 
                 return TargetAllocation(allocation)
 
-        # ========================================================
-        # SPY / GLD RATIO FILTER
-        # ========================================================
+            # ====================================================
+            # CPI
+            # ====================================================
 
-        risk_on = False
+            median_cpi_data = data.get(("median_cpi",))
 
-        try:
-
-            monthly_step = 21
-            required_history = 12 * monthly_step
+            latest_cpi = 0.0
 
             if (
-                len(closes["SPY"]) > required_history
-                and len(closes["GLD"]) > required_history
+                median_cpi_data
+                and len(median_cpi_data) > 0
             ):
 
-                current_ratio = (
-                    closes["SPY"][-1] /
-                    closes["GLD"][-1]
+                latest_cpi = (
+                    median_cpi_data[-1]
+                    .get("value", 0.0)
                 )
+
+            inflation_on = latest_cpi > 4
+
+            # ====================================================
+            # CLOSES
+            # ====================================================
+
+            closes = {}
+
+            for ticker in self.tickers:
+
+                ticker_closes = []
+
+                for bar in ohlcv:
+
+                    try:
+
+                        if (
+                            ticker in bar
+                            and bar[ticker]
+                            and "close" in bar[ticker]
+                        ):
+
+                            close_price = (
+                                bar[ticker]["close"]
+                            )
+
+                            if (
+                                close_price is not None
+                                and close_price > 0
+                            ):
+
+                                ticker_closes.append(
+                                    float(close_price)
+                                )
+
+                    except Exception:
+                        pass
+
+                closes[ticker] = ticker_closes
+
+            # ====================================================
+            # VALIDATION
+            # ====================================================
+
+            for ticker in self.tickers:
+
+                if len(closes[ticker]) < self.warmup:
+
+                    return TargetAllocation(allocation)
+
+            # ====================================================
+            # SPY / GLD RATIO FILTER
+            # ====================================================
+
+            risk_on = False
+
+            try:
+
+                monthly_step = 21
 
                 ratio_history = []
 
-                for i in range(1, 13):
+                max_months = min(
+                    12,
+                    int(
+                        min(
+                            len(closes["SPY"]),
+                            len(closes["GLD"])
+                        ) / monthly_step
+                    ) - 1
+                )
+
+                for i in range(1, max_months + 1):
 
                     idx = i * monthly_step
 
                     spy_price = closes["SPY"][-idx]
                     gld_price = closes["GLD"][-idx]
 
-                    if gld_price != 0:
+                    if gld_price > 0:
 
-                        ratio = (
+                        ratio_history.append(
                             spy_price / gld_price
                         )
 
-                        ratio_history.append(ratio)
+                if len(ratio_history) >= 3:
 
-                if len(ratio_history) > 0:
+                    current_ratio = (
+                        closes["SPY"][-1] /
+                        closes["GLD"][-1]
+                    )
 
                     ratio_sma = (
                         sum(ratio_history) /
@@ -276,80 +292,75 @@ class TradingStrategy(Strategy):
                         ratio_sma
                     )
 
-        except Exception as e:
+            except Exception as e:
 
-            log(f"Ratio filter error: {e}")
+                log(f"Ratio filter error: {e}")
 
-            risk_on = False
+                risk_on = False
 
-        # ========================================================
-        # TREND FILTERS
-        # ========================================================
+            # ====================================================
+            # TREND FILTERS
+            # ====================================================
 
-        spy_bull = self.trend_filter(
-            "SPY",
-            ohlcv,
-            closes["SPY"]
-        )
+            spy_bull = self.trend_filter(
+                "SPY",
+                ohlcv,
+                closes["SPY"]
+            )
 
-        tlt_bull = self.trend_filter(
-            "TLT",
-            ohlcv,
-            closes["TLT"]
-        )
+            tlt_bull = self.trend_filter(
+                "TLT",
+                ohlcv,
+                closes["TLT"]
+            )
 
-        cwb_bull = self.trend_filter(
-            "CWB",
-            ohlcv,
-            closes["CWB"]
-        )
+            cwb_bull = self.trend_filter(
+                "CWB",
+                ohlcv,
+                closes["CWB"]
+            )
 
-        # ========================================================
-        # MOMENTUM
-        # ========================================================
+            # ====================================================
+            # MOMENTUM
+            # ====================================================
 
-        momentum_lookback = 126
+            lookback = 126
 
-        cwb_ret = self.compute_return(
-            closes["CWB"],
-            momentum_lookback
-        )
+            cwb_ret = self.compute_return(
+                closes["CWB"],
+                lookback
+            )
 
-        hyg_ret = self.compute_return(
-            closes["HYG"],
-            momentum_lookback
-        )
+            hyg_ret = self.compute_return(
+                closes["HYG"],
+                lookback
+            )
 
-        tlt_ret = self.compute_return(
-            closes["TLT"],
-            momentum_lookback
-        )
+            tlt_ret = self.compute_return(
+                closes["TLT"],
+                lookback
+            )
 
-        ief_ret = self.compute_return(
-            closes["IEF"],
-            momentum_lookback
-        )
+            ief_ret = self.compute_return(
+                closes["IEF"],
+                lookback
+            )
 
-        tip_ret = self.compute_return(
-            closes["TIP"],
-            momentum_lookback
-        )
+            tip_ret = self.compute_return(
+                closes["TIP"],
+                lookback
+            )
 
-        shy_ret = self.compute_return(
-            closes["SHY"],
-            momentum_lookback
-        )
+            shy_ret = self.compute_return(
+                closes["SHY"],
+                lookback
+            )
 
-        # ========================================================
-        # RISK ASSET
-        # ========================================================
+            # ====================================================
+            # RISK ASSET
+            # ====================================================
 
-        risk_asset = "HYG"
-
-        if (
-            cwb_ret is not None
-            and hyg_ret is not None
-        ):
+            risk_asset = "HYG"
 
             if (
                 cwb_ret > hyg_ret
@@ -358,18 +369,13 @@ class TradingStrategy(Strategy):
 
                 risk_asset = "CWB"
 
-        # ========================================================
-        # DEFENSIVE ASSET
-        # ========================================================
+            # ====================================================
+            # DEFENSIVE ASSET
+            # ====================================================
 
-        defensive_asset = "IEF"
+            defensive_asset = "IEF"
 
-        if inflation_on:
-
-            if (
-                tip_ret is not None
-                and shy_ret is not None
-            ):
+            if inflation_on:
 
                 if tip_ret > shy_ret:
 
@@ -379,12 +385,7 @@ class TradingStrategy(Strategy):
 
                     defensive_asset = "SHY"
 
-        else:
-
-            if (
-                tlt_ret is not None
-                and ief_ret is not None
-            ):
+            else:
 
                 if (
                     tlt_ret > ief_ret
@@ -397,69 +398,78 @@ class TradingStrategy(Strategy):
 
                     defensive_asset = "IEF"
 
-        # ========================================================
-        # FINAL ASSET SELECTION
-        # ========================================================
+            # ====================================================
+            # FINAL ASSET
+            # ====================================================
 
-        if risk_on and spy_bull:
+            if risk_on and spy_bull:
 
-            selected_asset = risk_asset
+                selected_asset = risk_asset
 
-        else:
+            else:
 
-            selected_asset = defensive_asset
+                selected_asset = defensive_asset
 
-        # ========================================================
-        # VOLATILITY TARGETING
-        # ========================================================
+            # ====================================================
+            # VOL TARGETING
+            # ====================================================
 
-        realized_vol = self.calculate_realized_vol(
-            closes[selected_asset],
-            self.vol_lookback
-        )
-
-        if (
-            realized_vol is None
-            or realized_vol <= 0
-        ):
-
-            leverage = self.min_leverage
-
-        else:
-
-            leverage = (
-                self.target_vol /
-                realized_vol
-            )
-
-            leverage = max(
-                self.min_leverage,
-                min(
-                    leverage,
-                    self.max_leverage
+            realized_vol = (
+                self.calculate_realized_vol(
+                    closes[selected_asset],
+                    self.vol_lookback
                 )
             )
 
-        # ========================================================
-        # FINAL ALLOCATION
-        # ========================================================
+            if (
+                realized_vol is None
+                or realized_vol <= 0
+            ):
 
-        allocation[selected_asset] = round(
-            leverage,
-            4
-        )
+                leverage = self.min_leverage
 
-        # ========================================================
-        # LOGGING
-        # ========================================================
+            else:
 
-        #log(f"CPI: {latest_cpi}")
-        #log(f"Inflation regime: {inflation_on}")
-        log(f"Risk on: {risk_on}")
-        #log(f"Risk asset: {risk_asset}")
-        #log(f"Defensive asset: {defensive_asset}")
-        log(f"Selected asset: {selected_asset}")
-        log(f"Realized vol: {realized_vol}")
-        #log(f"Leverage: {leverage}")
+                leverage = (
+                    self.target_vol /
+                    realized_vol
+                )
 
-        return TargetAllocation(allocation)
+                leverage = max(
+                    self.min_leverage,
+                    min(
+                        leverage,
+                        self.max_leverage
+                    )
+                )
+
+            # Final hard validation
+            if (
+                leverage is None
+                or math.isnan(leverage)
+                or math.isinf(leverage)
+            ):
+
+                leverage = self.min_leverage
+
+            allocation[selected_asset] = round(
+                float(leverage),
+                4
+            )
+
+            # ====================================================
+            # LOGS
+            # ====================================================
+
+            log(f"Risk on: {risk_on}")
+            log(f"Selected asset: {selected_asset}")
+            log(f"Realized vol: {realized_vol}")
+            log(f"Leverage: {leverage}")
+
+            return TargetAllocation(allocation)
+
+        except Exception as e:
+
+            log(f"Strategy runtime error: {e}")
+
+            return TargetAllocation(allocation)
