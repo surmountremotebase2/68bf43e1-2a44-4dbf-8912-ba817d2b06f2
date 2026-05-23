@@ -529,8 +529,8 @@ class TradingStrategy(Strategy):
 
             #log(f"Risk on: {risk_on}")
             #log(f"Inflation on: {inflation_on}")
-            #log(f"Primary asset: {primary_asset}")
-            #log(f"Secondary asset: {secondary_asset}")
+            log(f"Primary asset: {primary_asset}")
+            log(f"Secondary asset: {secondary_asset}")
             #log(f"Primary vol: {primary_vol}")
             #log(f"Secondary vol: {secondary_vol}")
 
