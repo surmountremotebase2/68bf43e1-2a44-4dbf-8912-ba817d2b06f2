@@ -122,7 +122,7 @@ class TradingStrategy(Strategy):
 
                 returns.append(daily_return)
 
-            if len(returns) < 10:
+            if len(returns) < 1:
                 return None
 
             mean_return = (
@@ -190,7 +190,7 @@ class TradingStrategy(Strategy):
                     .get("value", 0.0)
                 )
 
-            inflation_on = latest_cpi > 4
+            inflation_on = latest_cpi > 2
 
             # ====================================================
             # CLOSES
