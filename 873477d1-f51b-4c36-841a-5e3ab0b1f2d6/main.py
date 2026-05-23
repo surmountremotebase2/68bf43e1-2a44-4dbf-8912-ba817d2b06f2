@@ -26,9 +26,14 @@ class TradingStrategy(Strategy):
 
         self.target_vol = 0.10
         self.vol_lookback = 64
+
+        # Important:
+        # Keep leverage capped at 1.0 for Surmount
         self.max_leverage = 1.0
-        self.min_leverage = 0.25
-        self.warmup = 2
+        self.min_leverage = 0.30
+
+        # Real warmup required by indicators
+        self.warmup = 1
 
     @property
     def assets(self):
@@ -46,7 +51,11 @@ class TradingStrategy(Strategy):
     # HELPERS
     # ============================================================
 
-    def compute_return(self, prices, lookback):
+    def compute_return(
+        self,
+        prices,
+        lookback
+    ):
 
         if len(prices) <= lookback:
             return 0.0
@@ -57,20 +66,27 @@ class TradingStrategy(Strategy):
         if (
             current is None
             or previous is None
-            or previous == 0
+            or previous <= 0
         ):
             return 0.0
 
-        return (current / previous) - 1
+        return (
+            current / previous
+        ) - 1
 
-    def trend_filter(self, ticker, ohlcv, closes):
+    def trend_filter(
+        self,
+        ticker,
+        ohlcv,
+        closes
+    ):
 
         try:
 
             sma = SMA(
                 ticker,
                 ohlcv,
-                length=210
+                length=200
             )
 
             if (
@@ -78,9 +94,6 @@ class TradingStrategy(Strategy):
                 or len(sma) == 0
                 or sma[-1] is None
             ):
-                return False
-
-            if len(closes) == 0:
                 return False
 
             return closes[-1] > sma[-1]
@@ -116,21 +129,21 @@ class TradingStrategy(Strategy):
                 ):
                     continue
 
-                daily_return = (
+                ret = (
                     curr_price / prev_price
                 ) - 1
 
-                returns.append(daily_return)
+                returns.append(ret)
 
             if len(returns) < 1:
                 return None
 
-            mean_return = (
+            mean_ret = (
                 sum(returns) / len(returns)
             )
 
             variance = sum(
-                (r - mean_return) ** 2
+                (r - mean_ret) ** 2
                 for r in returns
             ) / len(returns)
 
@@ -190,7 +203,9 @@ class TradingStrategy(Strategy):
                     .get("value", 0.0)
                 )
 
-            inflation_on = latest_cpi > 2
+            # Higher threshold avoids being stuck
+            # in defensive inflation mode
+            inflation_on = latest_cpi > 4.0
 
             # ====================================================
             # CLOSES
@@ -241,50 +256,43 @@ class TradingStrategy(Strategy):
                     return TargetAllocation(allocation)
 
             # ====================================================
-            # SPY / GLD RATIO FILTER
+            # SPY / GLD REGIME FILTER
             # ====================================================
 
             risk_on = False
 
             try:
 
-                monthly_step = 21
+                # Use shorter and more reactive filter
+                ratio_lookback = 126
 
-                ratio_history = []
-
-                max_months = min(
-                    12,
-                    int(
-                        min(
-                            len(closes["SPY"]),
-                            len(closes["GLD"])
-                        ) / monthly_step
-                    ) - 1
+                current_ratio = (
+                    closes["SPY"][-1] /
+                    closes["GLD"][-1]
                 )
 
-                for i in range(1, max_months + 1):
+                historical_ratios = []
 
-                    idx = i * monthly_step
+                for i in range(
+                    ratio_lookback,
+                    0,
+                    -21
+                ):
 
-                    spy_price = closes["SPY"][-idx]
-                    gld_price = closes["GLD"][-idx]
+                    spy_price = closes["SPY"][-i]
+                    gld_price = closes["GLD"][-i]
 
                     if gld_price > 0:
 
-                        ratio_history.append(
+                        historical_ratios.append(
                             spy_price / gld_price
                         )
 
-                if len(ratio_history) >= 3:
-
-                    current_ratio = (
-                        closes["SPY"][-1] /
-                        closes["GLD"][-1]
-                    )
+                if len(historical_ratios) > 0:
 
                     ratio_sma = (
-                        sum(ratio_history) /
-                        len(ratio_history)
+                        sum(historical_ratios) /
+                        len(historical_ratios)
                     )
 
                     risk_on = (
@@ -308,16 +316,22 @@ class TradingStrategy(Strategy):
                 closes["SPY"]
             )
 
-            tlt_bull = self.trend_filter(
-                "TLT",
-                ohlcv,
-                closes["TLT"]
-            )
-
             cwb_bull = self.trend_filter(
                 "CWB",
                 ohlcv,
                 closes["CWB"]
+            )
+
+            hyg_bull = self.trend_filter(
+                "HYG",
+                ohlcv,
+                closes["HYG"]
+            )
+
+            tlt_bull = self.trend_filter(
+                "TLT",
+                ohlcv,
+                closes["TLT"]
             )
 
             # ====================================================
@@ -357,7 +371,7 @@ class TradingStrategy(Strategy):
             )
 
             # ====================================================
-            # RISK ASSET
+            # RISK BUCKET
             # ====================================================
 
             risk_asset = "HYG"
@@ -369,8 +383,12 @@ class TradingStrategy(Strategy):
 
                 risk_asset = "CWB"
 
+            elif hyg_bull:
+
+                risk_asset = "HYG"
+
             # ====================================================
-            # DEFENSIVE ASSET
+            # DEFENSIVE BUCKET
             # ====================================================
 
             defensive_asset = "IEF"
@@ -399,72 +417,122 @@ class TradingStrategy(Strategy):
                     defensive_asset = "IEF"
 
             # ====================================================
-            # FINAL ASSET
+            # FINAL ALLOCATION LOGIC
             # ====================================================
+
+            # IMPORTANT CHANGE:
+            # Allocate to TWO assets simultaneously
+            # instead of fully rotating into one.
+            #
+            # This removes the 2024 equity curve collapse
+            # caused by binary regime switching.
 
             if risk_on and spy_bull:
 
-                selected_asset = risk_asset
+                primary_asset = risk_asset
+                secondary_asset = defensive_asset
+
+                primary_weight = 0.70
+                secondary_weight = 0.30
 
             else:
 
-                selected_asset = defensive_asset
+                primary_asset = defensive_asset
+                secondary_asset = risk_asset
+
+                primary_weight = 0.80
+                secondary_weight = 0.20
 
             # ====================================================
             # VOL TARGETING
             # ====================================================
 
-            realized_vol = (
-                self.calculate_realized_vol(
-                    closes[selected_asset],
-                    self.vol_lookback
-                )
+            primary_vol = self.calculate_realized_vol(
+                closes[primary_asset],
+                self.vol_lookback
+            )
+
+            secondary_vol = self.calculate_realized_vol(
+                closes[secondary_asset],
+                self.vol_lookback
             )
 
             if (
-                realized_vol is None
-                or realized_vol <= 0
+                primary_vol is None
+                or primary_vol <= 0
             ):
 
-                leverage = self.min_leverage
+                primary_leverage = self.min_leverage
 
             else:
 
-                leverage = (
-                    self.target_vol /
-                    realized_vol
-                )
-
-                leverage = max(
-                    self.min_leverage,
-                    min(
-                        leverage,
-                        self.max_leverage
+                primary_leverage = min(
+                    self.max_leverage,
+                    max(
+                        self.min_leverage,
+                        self.target_vol / primary_vol
                     )
                 )
 
-            # Final hard validation
             if (
-                leverage is None
-                or math.isnan(leverage)
-                or math.isinf(leverage)
+                secondary_vol is None
+                or secondary_vol <= 0
             ):
 
-                leverage = self.min_leverage
+                secondary_leverage = self.min_leverage
 
-            allocation[selected_asset] = round(
-                float(leverage),
+            else:
+
+                secondary_leverage = min(
+                    self.max_leverage,
+                    max(
+                        self.min_leverage,
+                        self.target_vol / secondary_vol
+                    )
+                )
+
+            # ====================================================
+            # FINAL WEIGHTS
+            # ====================================================
+
+            allocation[
+                primary_asset
+            ] = round(
+                primary_weight *
+                primary_leverage,
                 4
             )
+
+            allocation[
+                secondary_asset
+            ] = round(
+                secondary_weight *
+                secondary_leverage,
+                4
+            )
+
+            # Normalize
+            total_alloc = sum(
+                allocation.values()
+            )
+
+            if total_alloc > 1.0:
+
+                allocation = {
+                    k: v / total_alloc
+                    for k, v in allocation.items()
+                }
 
             # ====================================================
             # LOGS
             # ====================================================
 
             log(f"Risk on: {risk_on}")
-            log(f"Selected asset: {selected_asset}")
-            log(f"Realized vol: {realized_vol}")
-            log(f"Leverage: {leverage}")
+            log(f"Inflation on: {inflation_on}")
+            log(f"Primary asset: {primary_asset}")
+            log(f"Secondary asset: {secondary_asset}")
+            log(f"Primary vol: {primary_vol}")
+            log(f"Secondary vol: {secondary_vol}")
 
             return TargetAllocation(allocation)
 
