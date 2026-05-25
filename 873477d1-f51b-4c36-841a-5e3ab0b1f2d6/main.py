@@ -24,8 +24,8 @@ class TradingStrategy(Strategy):
             MedianCPI()
         ]
 
-        self.target_vol = 0.10
-        self.vol_lookback = 64
+        self.target_vol = 0.15
+        self.vol_lookback = 126
 
         # Important:
         # Keep leverage capped at 1.0 for Surmount
