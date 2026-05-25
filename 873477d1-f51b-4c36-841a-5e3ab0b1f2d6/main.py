@@ -8,31 +8,17 @@ import math
 class TradingStrategy(Strategy):
 
     def __init__(self):
-
         self.tickers = [
-            "SPY",
-            "GLD",
-            "CWB",
-            "HYG",
-            "TLT",
-            "IEF",
-            "TIP",
-            "SHY"
+            "TLT",  # Long-term treasuries (duration)
+            "IEF",  # Intermediate treasuries (core)
+            "TIP",  # TIPS (inflation hedge)
+            "SHY",  # Short-term treasuries (cash proxy)
+            "HYG",  # High yield corporate (credit)
+            "CWB",  # Convertible bonds (credit + equity beta)
+            "GLD",  # Gold (inflation + tail risk hedge)
         ]
-
-        self.data_list = [
-            MedianCPI()
-        ]
-
-        self.target_vol = 0.15
-        self.vol_lookback = 126
-
-        # Important:
-        # Keep leverage capped at 1.0 for Surmount
-        self.max_leverage = 1.0
-        self.min_leverage = 0.30
-
-        # Real warmup required by indicators
+        self.data_list = [MedianCPI()]
+        self.min_bars = 140
         self.warmup = 1
 
     @property
@@ -51,493 +37,264 @@ class TradingStrategy(Strategy):
     # HELPERS
     # ============================================================
 
-    def compute_return(
-        self,
-        prices,
-        lookback
-    ):
+    def get_closes(self, ohlcv, ticker):
+        closes = []
+        for bar in ohlcv:
+            try:
+                if (
+                    ticker in bar
+                    and bar[ticker]
+                    and "close" in bar[ticker]
+                ):
+                    p = bar[ticker]["close"]
+                    if p is not None and p > 0:
+                        closes.append(float(p))
+            except Exception:
+                pass
+        return closes
 
+    def momentum(self, prices, lookback):
         if len(prices) <= lookback:
             return 0.0
-
-        current = prices[-1]
-        previous = prices[-1 - lookback]
-
-        if (
-            current is None
-            or previous is None
-            or previous <= 0
-        ):
+        prev = prices[-1 - lookback]
+        if prev is None or prev <= 0:
             return 0.0
+        return (prices[-1] / prev) - 1.0
 
-        return (
-            current / previous
-        ) - 1
+    def composite_momentum(self, prices):
+        """
+        Blended 1m / 3m / 6m momentum.
+        Shorter windows make it responsive;
+        longer windows suppress whipsaw.
+        """
+        m1 = self.momentum(prices, 21)
+        m3 = self.momentum(prices, 63)
+        m6 = self.momentum(prices, 126)
+        return 0.35 * m1 + 0.35 * m3 + 0.30 * m6
 
-    def trend_filter(
-        self,
-        ticker,
-        ohlcv,
-        closes
-    ):
-
-        try:
-
-            sma = SMA(
-                ticker,
-                ohlcv,
-                length=200
-            )
-
-            if (
-                sma is None
-                or len(sma) == 0
-                or sma[-1] is None
-            ):
-                return False
-
-            return closes[-1] > sma[-1]
-
-        except Exception:
-
-            return False
-
-    def calculate_realized_vol(
-        self,
-        prices,
-        lookback=64
-    ):
-
-        try:
-
-            if len(prices) < lookback + 1:
-                return None
-
-            returns = []
-
-            start_idx = len(prices) - lookback
-
-            for i in range(start_idx, len(prices)):
-
-                prev_price = prices[i - 1]
-                curr_price = prices[i]
-
-                if (
-                    prev_price is None
-                    or curr_price is None
-                    or prev_price <= 0
-                ):
-                    continue
-
-                ret = (
-                    curr_price / prev_price
-                ) - 1
-
-                returns.append(ret)
-
-            if len(returns) < 1:
-                return None
-
-            mean_ret = (
-                sum(returns) / len(returns)
-            )
-
-            variance = sum(
-                (r - mean_ret) ** 2
-                for r in returns
-            ) / len(returns)
-
-            daily_vol = math.sqrt(variance)
-
-            annualized_vol = (
-                daily_vol * math.sqrt(252)
-            )
-
-            if (
-                annualized_vol <= 0
-                or math.isnan(annualized_vol)
-                or math.isinf(annualized_vol)
-            ):
-                return None
-
-            return annualized_vol
-
-        except Exception:
-
+    def realized_vol(self, prices, lookback=63):
+        if len(prices) < lookback + 1:
             return None
+        rets = []
+        for i in range(len(prices) - lookback, len(prices)):
+            if prices[i - 1] > 0:
+                rets.append(
+                    prices[i] / prices[i - 1] - 1.0
+                )
+        if len(rets) < 20:
+            return None
+        mean = sum(rets) / len(rets)
+        var = sum(
+            (r - mean) ** 2 for r in rets
+        ) / len(rets)
+        ann_vol = math.sqrt(var) * math.sqrt(252)
+        if (
+            ann_vol <= 0
+            or math.isnan(ann_vol)
+            or math.isinf(ann_vol)
+        ):
+            return None
+        return ann_vol
+
+    def is_above_sma(
+        self, ticker, ohlcv, closes, length=100
+    ):
+        try:
+            sma = SMA(ticker, ohlcv, length=length)
+            if (
+                sma
+                and len(sma) > 0
+                and sma[-1] is not None
+            ):
+                return closes[-1] > sma[-1]
+        except Exception:
+            pass
+        return False
 
     # ============================================================
     # MAIN STRATEGY
     # ============================================================
 
     def run(self, data):
-
         allocation = {
-            ticker: 0.0
-            for ticker in self.tickers
+            t: 0.0 for t in self.tickers
         }
 
         try:
-
             ohlcv = data["ohlcv"]
-
-            if len(ohlcv) < self.warmup:
-
+            if len(ohlcv) < self.min_bars:
                 return TargetAllocation(allocation)
 
-            # ====================================================
-            # CPI
-            # ====================================================
+            closes = {
+                t: self.get_closes(ohlcv, t)
+                for t in self.tickers
+            }
 
-            median_cpi_data = data.get(("median_cpi",))
+            for t in self.tickers:
+                if len(closes[t]) < self.min_bars:
+                    return TargetAllocation(allocation)
 
+            # ================================================
+            # CPI REGIME
+            # ================================================
+            median_cpi_data = data.get(
+                ("median_cpi",)
+            )
             latest_cpi = 0.0
-
             if (
                 median_cpi_data
                 and len(median_cpi_data) > 0
             ):
-
                 latest_cpi = (
                     median_cpi_data[-1]
                     .get("value", 0.0)
                 )
-
-            # Higher threshold avoids being stuck
-            # in defensive inflation mode
             inflation_on = latest_cpi > 4.0
 
-            # ====================================================
-            # CLOSES
-            # ====================================================
-
-            closes = {}
-
-            for ticker in self.tickers:
-
-                ticker_closes = []
-
-                for bar in ohlcv:
-
-                    try:
-
-                        if (
-                            ticker in bar
-                            and bar[ticker]
-                            and "close" in bar[ticker]
-                        ):
-
-                            close_price = (
-                                bar[ticker]["close"]
-                            )
-
-                            if (
-                                close_price is not None
-                                and close_price > 0
-                            ):
-
-                                ticker_closes.append(
-                                    float(close_price)
-                                )
-
-                    except Exception:
-                        pass
-
-                closes[ticker] = ticker_closes
-
-            # ====================================================
-            # VALIDATION
-            # ====================================================
-
-            for ticker in self.tickers:
-
-                if len(closes[ticker]) < self.warmup:
-
-                    return TargetAllocation(allocation)
-
-            # ====================================================
-            # SPY / GLD REGIME FILTER
-            # ====================================================
-
-            risk_on = False
-
-            try:
-
-                # Use shorter and more reactive filter
-                ratio_lookback = 126
-
-                current_ratio = (
-                    closes["SPY"][-1] /
-                    closes["GLD"][-1]
-                )
-
-                historical_ratios = []
-
-                for i in range(
-                    ratio_lookback,
-                    0,
-                    -21
-                ):
-
-                    spy_price = closes["SPY"][-i]
-                    gld_price = closes["GLD"][-i]
-
-                    if gld_price > 0:
-
-                        historical_ratios.append(
-                            spy_price / gld_price
-                        )
-
-                if len(historical_ratios) > 0:
-
-                    ratio_sma = (
-                        sum(historical_ratios) /
-                        len(historical_ratios)
-                    )
-
-                    risk_on = (
-                        current_ratio >
-                        ratio_sma
-                    )
-
-            except Exception as e:
-
-                log(f"Ratio filter error: {e}")
-
-                risk_on = False
-
-            # ====================================================
-            # TREND FILTERS
-            # ====================================================
-
-            spy_bull = self.trend_filter(
-                "SPY",
-                ohlcv,
-                closes["SPY"]
-            )
-
-            cwb_bull = self.trend_filter(
-                "CWB",
-                ohlcv,
-                closes["CWB"]
-            )
-
-            hyg_bull = self.trend_filter(
-                "HYG",
-                ohlcv,
-                closes["HYG"]
-            )
-
-            tlt_bull = self.trend_filter(
-                "TLT",
-                ohlcv,
-                closes["TLT"]
-            )
-
-            # ====================================================
-            # MOMENTUM
-            # ====================================================
-
-            lookback = 126
-
-            cwb_ret = self.compute_return(
-                closes["CWB"],
-                lookback
-            )
-
-            hyg_ret = self.compute_return(
-                closes["HYG"],
-                lookback
-            )
-
-            tlt_ret = self.compute_return(
-                closes["TLT"],
-                lookback
-            )
-
-            ief_ret = self.compute_return(
-                closes["IEF"],
-                lookback
-            )
-
-            tip_ret = self.compute_return(
-                closes["TIP"],
-                lookback
-            )
-
-            shy_ret = self.compute_return(
-                closes["SHY"],
-                lookback
-            )
-
-            # ====================================================
-            # RISK BUCKET
-            # ====================================================
-
-            risk_asset = "HYG"
-
-            if (
-                cwb_ret > hyg_ret
-                and cwb_bull
-            ):
-
-                risk_asset = "CWB"
-
-            elif hyg_bull:
-
-                risk_asset = "HYG"
-
-            # ====================================================
-            # DEFENSIVE BUCKET
-            # ====================================================
-
-            defensive_asset = "IEF"
-
+            # ================================================
+            # UNIVERSE SELECTION
+            # ================================================
+            # Inflation regime excludes long duration
+            # (TLT gets crushed when rates rise)
             if inflation_on:
-
-                if tip_ret > shy_ret:
-
-                    defensive_asset = "TIP"
-
-                else:
-
-                    defensive_asset = "SHY"
-
+                candidates = [
+                    "TIP", "SHY", "HYG", "GLD"
+                ]
+                safe_haven = "SHY"
             else:
+                candidates = [
+                    "TLT", "IEF", "HYG",
+                    "CWB", "GLD"
+                ]
+                safe_haven = "IEF"
 
-                if (
-                    tlt_ret > ief_ret
-                    and tlt_bull
-                ):
-
-                    defensive_asset = "TLT"
-
-                else:
-
-                    defensive_asset = "IEF"
-
-            # ====================================================
-            # FINAL ALLOCATION LOGIC
-            # ====================================================
-
-            # IMPORTANT CHANGE:
-            # Allocate to TWO assets simultaneously
-            # instead of fully rotating into one.
-            #
-            # This removes the 2024 equity curve collapse
-            # caused by binary regime switching.
-
-            if risk_on and spy_bull:
-
-                primary_asset = risk_asset
-                secondary_asset = defensive_asset
-
-                primary_weight = 0.70
-                secondary_weight = 0.30
-
-            else:
-
-                primary_asset = defensive_asset
-                secondary_asset = risk_asset
-
-                primary_weight = 0.80
-                secondary_weight = 0.20
-
-            # ====================================================
-            # VOL TARGETING
-            # ====================================================
-
-            primary_vol = self.calculate_realized_vol(
-                closes[primary_asset],
-                self.vol_lookback
-            )
-
-            secondary_vol = self.calculate_realized_vol(
-                closes[secondary_asset],
-                self.vol_lookback
-            )
-
-            if (
-                primary_vol is None
-                or primary_vol <= 0
-            ):
-
-                primary_leverage = self.min_leverage
-
-            else:
-
-                primary_leverage = min(
-                    self.max_leverage,
-                    max(
-                        self.min_leverage,
-                        self.target_vol / primary_vol
-                    )
+            # ================================================
+            # MOMENTUM RANKING
+            # ================================================
+            scores = {}
+            for t in candidates:
+                scores[t] = self.composite_momentum(
+                    closes[t]
                 )
 
-            if (
-                secondary_vol is None
-                or secondary_vol <= 0
-            ):
+            ranked = sorted(
+                scores.keys(),
+                key=lambda t: scores[t],
+                reverse=True,
+            )
 
-                secondary_leverage = self.min_leverage
+            # ================================================
+            # ABSOLUTE MOMENTUM FILTER
+            # Only hold assets with positive 3m return.
+            # This is the key mechanism that avoids
+            # holding losing positions for weeks.
+            # ================================================
+            positive = [
+                t for t in ranked
+                if self.momentum(closes[t], 63) > 0
+            ]
 
-            else:
-
-                secondary_leverage = min(
-                    self.max_leverage,
-                    max(
-                        self.min_leverage,
-                        self.target_vol / secondary_vol
-                    )
+            # ================================================
+            # TREND CONFIRMATION (100-day SMA)
+            # Shorter than 200 — bonds trend faster
+            # than equities, 200 is too lagging.
+            # ================================================
+            confirmed = [
+                t for t in positive
+                if self.is_above_sma(
+                    t, ohlcv, closes[t], 100
                 )
+            ]
 
-            # ====================================================
-            # FINAL WEIGHTS
-            # ====================================================
+            # ================================================
+            # INVERSE-VOL WEIGHTING
+            # Lower-vol assets get more weight,
+            # higher-vol assets get less.
+            # This is the vol targeting replacement.
+            # ================================================
+            def inv_vol_weights(assets, fallback_w):
+                """
+                Allocate budget proportional to
+                1/vol for each selected asset.
+                """
+                vols = {}
+                for t in assets:
+                    v = self.realized_vol(
+                        closes[t], 63
+                    )
+                    if v and v > 0:
+                        vols[t] = v
+                    else:
+                        vols[t] = 0.10  # fallback
+                inv = {
+                    t: 1.0 / vols[t]
+                    for t in assets
+                }
+                total_inv = sum(inv.values())
+                if total_inv <= 0:
+                    return {
+                        t: fallback_w
+                        for t in assets
+                    }
+                return {
+                    t: inv[t] / total_inv
+                    for t in assets
+                }
 
-            allocation[
-                primary_asset
-            ] = round(
-                primary_weight *
-                primary_leverage,
-                4
-            )
+            # ================================================
+            # ALLOCATION TIERS
+            # ================================================
+            if len(confirmed) >= 3:
+                # Top 3 by momentum, inv-vol weighted
+                hold = confirmed[:3]
+                weights = inv_vol_weights(hold, 0.33)
+            elif len(confirmed) == 2:
+                hold = confirmed[:2]
+                w = inv_vol_weights(hold, 0.40)
+                # Scale to 80%, 20% to safe haven
+                weights = {
+                    t: v * 0.80 for t, v in w.items()
+                }
+                weights[safe_haven] = (
+                    weights.get(safe_haven, 0) + 0.20
+                )
+            elif len(confirmed) == 1:
+                weights = {
+                    confirmed[0]: 0.40,
+                    safe_haven: 0.60,
+                }
+            else:
+                # Nothing trending — full defensive
+                if safe_haven == "SHY":
+                    weights = {"SHY": 1.0}
+                else:
+                    weights = {
+                        safe_haven: 0.70,
+                        "SHY": 0.30,
+                    }
 
-            allocation[
-                secondary_asset
-            ] = round(
-                secondary_weight *
-                secondary_leverage,
-                4
-            )
+            # ================================================
+            # APPLY
+            # ================================================
+            for t, w in weights.items():
+                if t in allocation:
+                    allocation[t] = round(w, 4)
 
-            # Normalize
-            total_alloc = sum(
-                allocation.values()
-            )
-
-            if total_alloc > 1.0:
-
+            total = sum(allocation.values())
+            if total > 1.0:
                 allocation = {
-                    k: v / total_alloc
+                    k: v / total
                     for k, v in allocation.items()
                 }
 
-            # ====================================================
-            # LOGS
-            # ====================================================
-
-            #log(f"Risk on: {risk_on}")
-            #log(f"Inflation on: {inflation_on}")
-            log(f"Primary asset: {primary_asset}")
-            log(f"Secondary asset: {secondary_asset}")
-            #log(f"Primary vol: {primary_vol}")
-            #log(f"Secondary vol: {secondary_vol}")
-
+            held = [
+                (t, round(w, 3))
+                for t, w in allocation.items()
+                if w > 0
+            ]
+            log(f"Hold: {held}")
             return TargetAllocation(allocation)
 
         except Exception as e:
-
-            log(f"Strategy runtime error: {e}")
-
+            log(f"Error: {e}")
             return TargetAllocation(allocation)
