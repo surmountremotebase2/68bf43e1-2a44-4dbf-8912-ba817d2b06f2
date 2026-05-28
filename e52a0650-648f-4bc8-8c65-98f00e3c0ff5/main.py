@@ -6,87 +6,56 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
     """
     Meb Faber Tactical Asset Allocation Strategy
+    --------------------------------------------
 
-    Core Logic:
-    - Uses a diversified global multi-asset portfolio
-    - Invests only in assets trading above their 200-day SMA
-    - Assets below their SMA move to cash (SHY)
-    - Equal-weight allocation among risk-on assets
-    - Monthly-style trend following implemented on daily data
+    Logic:
+    - Multi-asset trend-following portfolio
+    - Invest in assets trading above 200-day SMA
+    - Allocate equally among qualifying assets
+    - Move remaining allocation to SHY (cash proxy)
 
-    Strategy Philosophy:
-    This is inspired by Meb Faber's classic trend-following model from:
-    "A Quantitative Approach to Tactical Asset Allocation"
-
-    Objective:
-    Reduce large drawdowns while maintaining exposure to long-term
-    global asset trends.
+    Designed specifically to avoid Surmount input stream issues
+    caused by missing ticker data inside OHLCV dictionaries.
     """
 
     @property
     def assets(self):
         """
-        Tradable universe.
-
-        SPY = US Equities
-        EFA = International Developed Equities
-        EEM = Emerging Markets
-        VNQ = Real Estate
-        DBC = Commodities
-        TLT = Long-Term Treasuries
-        GLD = Gold
-        SHY = Short-Term Treasuries / Cash proxy
+        Asset universe.
         """
         return [
-            "SPY",
-            "EFA",
-            "EEM",
-            "VNQ",
-            "DBC",
-            "TLT",
-            "GLD",
-            "SHY"
+            "SPY",   # US equities
+            "EFA",   # International equities
+            "EEM",   # Emerging markets
+            "VNQ",   # Real estate
+            "DBC",   # Commodities
+            "TLT",   # Long-term treasuries
+            "GLD",   # Gold
+            "SHY"    # Cash proxy
         ]
 
     @property
     def interval(self):
-        """
-        Daily interval.
-        """
         return "1day"
 
     @property
     def data(self):
-        """
-        No additional alternative datasets required.
-        """
         return []
 
     def run(self, data):
         """
-        Execute strategy logic.
-
-        Rules:
-        - If asset close > 200-day SMA:
-            allocate equally among qualifying assets
-        - Otherwise:
-            move capital to SHY (cash equivalent)
-
-        Returns:
-            TargetAllocation
+        Main strategy execution.
         """
 
         ohlcv = data["ohlcv"]
 
-        # Defensive fallback
-        if not ohlcv or len(ohlcv) < 1:
-            log("Insufficient historical data")
+        # ---------------------------------------------------------
+        # Basic Safety Checks
+        # ---------------------------------------------------------
+        if ohlcv is None or len(ohlcv) < 220:
+            log("Not enough historical data")
+            return TargetAllocation({"SHY": 1.0})
 
-            return TargetAllocation({
-                "SHY": 1.0
-            })
-
-        # Risk assets excluding cash proxy
         risk_assets = [
             "SPY",
             "EFA",
@@ -97,46 +66,68 @@ class TradingStrategy(Strategy):
             "GLD"
         ]
 
-        allocations = {}
-
         qualified_assets = []
 
         # ---------------------------------------------------------
-        # Trend Filter: Price vs 200-Day SMA
+        # Trend Following Logic
         # ---------------------------------------------------------
         for ticker in risk_assets:
 
             try:
-                sma_200 = SMA(ticker, ohlcv, length=200)
 
-                if sma_200 is None or len(sma_200) == 0:
-                    log(f"Missing SMA data for {ticker}")
+                # Verify ticker exists in latest OHLCV bar
+                if ticker not in ohlcv[-1]:
+                    log(f"{ticker} missing from latest OHLCV")
                     continue
 
-                current_close = ohlcv[-1][ticker]["close"]
-                current_sma = sma_200[-1]
+                # Get SMA values
+                sma = SMA(ticker, ohlcv, length=200)
 
-                # Trend-following condition
-                if current_close > current_sma:
+                if sma is None:
+                    log(f"SMA unavailable for {ticker}")
+                    continue
+
+                if len(sma) == 0:
+                    log(f"Empty SMA series for {ticker}")
+                    continue
+
+                latest_sma = sma[-1]
+
+                if latest_sma is None:
+                    log(f"Latest SMA is None for {ticker}")
+                    continue
+
+                latest_close = ohlcv[-1][ticker]["close"]
+
+                if latest_close is None:
+                    log(f"Close price missing for {ticker}")
+                    continue
+
+                # Meb Faber Trend Filter
+                if latest_close > latest_sma:
                     qualified_assets.append(ticker)
 
                     log(
-                        f"{ticker}: Bullish trend "
-                        f"(Close={current_close:.2f} > SMA200={current_sma:.2f})"
+                        f"{ticker} bullish "
+                        f"(Close={latest_close:.2f}, "
+                        f"SMA200={latest_sma:.2f})"
                     )
 
                 else:
                     log(
-                        f"{ticker}: Defensive mode "
-                        f"(Close={current_close:.2f} <= SMA200={current_sma:.2f})"
+                        f"{ticker} bearish "
+                        f"(Close={latest_close:.2f}, "
+                        f"SMA200={latest_sma:.2f})"
                     )
 
             except Exception as e:
                 log(f"Error processing {ticker}: {str(e)}")
 
         # ---------------------------------------------------------
-        # Allocation Engine
+        # Allocation Logic
         # ---------------------------------------------------------
+        allocations = {}
+
         if len(qualified_assets) > 0:
 
             weight = 1.0 / len(qualified_assets)
@@ -145,18 +136,19 @@ class TradingStrategy(Strategy):
                 allocations[ticker] = weight
 
             log(
-                f"Allocating equally across "
-                f"{len(qualified_assets)} trending assets"
+                f"Allocated equally across "
+                f"{len(qualified_assets)} assets"
             )
 
         else:
-            # Full defensive allocation
+
+            # Defensive allocation
             allocations["SHY"] = 1.0
 
-            log("No assets in bullish trends - allocating 100% to SHY")
+            log("No bullish assets detected")
 
         # ---------------------------------------------------------
-        # Final Normalization Safety
+        # Final Weight Validation
         # ---------------------------------------------------------
         total_weight = sum(allocations.values())
 
@@ -164,8 +156,8 @@ class TradingStrategy(Strategy):
             return TargetAllocation({"SHY": 1.0})
 
         normalized_allocations = {
-            asset: weight / total_weight
-            for asset, weight in allocations.items()
+            k: v / total_weight
+            for k, v in allocations.items()
         }
 
         return TargetAllocation(normalized_allocations)
