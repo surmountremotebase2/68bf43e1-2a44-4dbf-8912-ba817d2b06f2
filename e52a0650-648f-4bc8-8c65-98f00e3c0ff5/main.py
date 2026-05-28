@@ -52,7 +52,7 @@ class TradingStrategy(Strategy):
         # ---------------------------------------------------------
         # Basic Safety Checks
         # ---------------------------------------------------------
-        if ohlcv is None or len(ohlcv) < 220:
+        if ohlcv is None or len(ohlcv) < 1:
             log("Not enough historical data")
             return TargetAllocation({"SHY": 1.0})
 
