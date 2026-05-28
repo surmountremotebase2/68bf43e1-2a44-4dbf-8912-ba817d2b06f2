@@ -79,7 +79,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         # Defensive fallback
-        if not ohlcv or len(ohlcv) < 210:
+        if not ohlcv or len(ohlcv) < 1:
             log("Insufficient historical data")
 
             return TargetAllocation({
