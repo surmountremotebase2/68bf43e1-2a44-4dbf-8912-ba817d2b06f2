@@ -25,9 +25,9 @@ class TradingStrategy(Strategy):
         """
         return [
             "SPY",   # US equities
-            "XLK",
-            "XLV",
-            "FEZ",
+            "QQQ",
+            "IJT",   #Small Caps
+            "FEZ",   #EU Equity
             "EFA",   # International equities
             "EEM",   # Emerging markets
             "VNQ",   # Real estate
@@ -61,8 +61,8 @@ class TradingStrategy(Strategy):
 
         risk_assets = [
             "SPY",
-            "XLK",
-            "XLV",
+            "QQQ",
+            "IJT",
             "FEZ",
             "EFA",
             "EEM",
