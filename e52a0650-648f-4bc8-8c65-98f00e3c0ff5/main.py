@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
             "SPY",   # US equities
             "XLK",
             "XLV",
-            #"FEZ",
+            "FEZ",
             "EFA",   # International equities
             "EEM",   # Emerging markets
             "VNQ",   # Real estate
@@ -61,10 +61,13 @@ class TradingStrategy(Strategy):
 
         risk_assets = [
             "SPY",
+            "XLK",
+            "XLV",
+            "FEZ",
             "EFA",
             "EEM",
             "VNQ",
-            "DBC",
+            #"DBC",
             "TLT",
             "GLD"
         ]
