@@ -25,8 +25,9 @@ class TradingStrategy(Strategy):
         """
         return [
             "SPY",   # US equities
-            #"XLK",
-            #"XLV",
+            "QQQ",
+            "XLK",
+            "XLV",
             #"FEZ",
             "EFA",   # International equities
             "EEM",   # Emerging markets
