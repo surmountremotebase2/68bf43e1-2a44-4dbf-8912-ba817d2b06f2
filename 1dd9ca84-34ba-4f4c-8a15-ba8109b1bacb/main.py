@@ -39,8 +39,8 @@ class TradingStrategy(Strategy):
         return [
             # Risk-On
             "SPY",
-            "XLK",
-            "XLV",
+            #"XLK",
+            "QQQ",
             "FEZ",
             "EFA",
             "EEM",
@@ -75,8 +75,8 @@ class TradingStrategy(Strategy):
 
         risk_on = [
             "SPY",
-            "XLK",
-            "XLV",
+            "QQQ",
+            #"XLV",
             "FEZ",
             "EFA",
             "EEM",
