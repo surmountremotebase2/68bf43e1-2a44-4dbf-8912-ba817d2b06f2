@@ -107,11 +107,11 @@ class TradingStrategy(Strategy):
                 if latest_close > latest_sma:
                     qualified_assets.append(ticker)
 
-                    log(
-                        f"{ticker} bullish "
-                        f"(Close={latest_close:.2f}, "
-                        f"SMA200={latest_sma:.2f})"
-                    )
+                    #log(
+                    #    f"{ticker} bullish "
+                    #    f"(Close={latest_close:.2f}, "
+                    #    f"SMA200={latest_sma:.2f})"
+                    #)
 
                 else:
                     log(
