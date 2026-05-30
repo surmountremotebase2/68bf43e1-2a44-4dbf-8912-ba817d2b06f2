@@ -25,6 +25,9 @@ class TradingStrategy(Strategy):
         """
         return [
             "SPY",   # US equities
+            "XLK",
+            "XLV",
+            "FEZ",
             "EFA",   # International equities
             "EEM",   # Emerging markets
             "VNQ",   # Real estate
@@ -113,12 +116,12 @@ class TradingStrategy(Strategy):
                     #    f"SMA200={latest_sma:.2f})"
                     #)
 
-                else:
-                    log(
-                        f"{ticker} bearish "
-                        f"(Close={latest_close:.2f}, "
-                        f"SMA200={latest_sma:.2f})"
-                    )
+                #else:
+                    #log(
+                    #    f"{ticker} bearish "
+                    #    f"(Close={latest_close:.2f}, "
+                    #    f"SMA200={latest_sma:.2f})"
+                    #)
 
             except Exception as e:
                 log(f"Error processing {ticker}: {str(e)}")
