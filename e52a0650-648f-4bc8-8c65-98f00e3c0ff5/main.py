@@ -135,10 +135,10 @@ class TradingStrategy(Strategy):
             for ticker in qualified_assets:
                 allocations[ticker] = weight
 
-            log(
-                f"Allocated equally across "
-                f"{len(qualified_assets)} assets"
-            )
+            #log(
+            #    f"Allocated equally across "
+            #    f"{len(qualified_assets)} assets"
+            #)
 
         else:
 
