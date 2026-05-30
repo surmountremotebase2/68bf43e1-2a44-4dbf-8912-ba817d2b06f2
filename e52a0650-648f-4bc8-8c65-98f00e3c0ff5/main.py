@@ -25,17 +25,16 @@ class TradingStrategy(Strategy):
         """
         return [
             "SPY",   # US equities
-            "QQQ",
             "XLK",
             "XLV",
             #"FEZ",
             "EFA",   # International equities
             "EEM",   # Emerging markets
             "VNQ",   # Real estate
-            "DBC",   # Commodities
+            "UUP",   # Commodities
             "TLT",   # Long-term treasuries
             "GLD",   # Gold
-            "SHY"    # Cash proxy
+            "BIL"    # Cash proxy
         ]
 
     @property
