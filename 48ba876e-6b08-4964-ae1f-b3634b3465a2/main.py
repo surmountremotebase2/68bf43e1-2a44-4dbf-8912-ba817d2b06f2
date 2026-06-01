@@ -1,19 +1,10 @@
 from surmount.base_class import Strategy, TargetAllocation
 from surmount.logging import log
 from surmount.technical_indicators import Momentum
+import math
 
 
 class TradingStrategy(Strategy):
-    """
-    Tactical Global Dual Momentum Strategy
-
-    Enhancements:
-    - Composite momentum ranking (12m + 6m + 3m + 1m)
-    - Relative Momentum across risk assets
-    - Absolute Momentum filter on 12m trend
-    - Partial defensive replacement instead of all-or-nothing risk-off
-    - Always holds the top 3 ranked opportunities
-    """
 
     @property
     def assets(self):
@@ -49,14 +40,6 @@ class TradingStrategy(Strategy):
 
         allocations = {asset: 0.0 for asset in self.assets}
 
-        # --------------------------------------------------
-        # Require sufficient history
-        # --------------------------------------------------
-
-        if len(ohlcv) < 1:
-            allocations["BIL"] = 1.0
-            return TargetAllocation(allocations)
-
         risk_assets = [
             "SPY",
             "RSP",
@@ -75,88 +58,74 @@ class TradingStrategy(Strategy):
             "BIL"
         ]
 
-        composite_scores = {}
-        absolute_momentum = {}
+        # Need enough history for 6 month momentum
+        if len(ohlcv) < 1:
+            allocations["BIL"] = 1.0
+            return TargetAllocation(allocations)
 
-        # --------------------------------------------------
-        # Momentum Calculation
-        # --------------------------------------------------
-        #
-        # Momentum() returns price change over N bars.
-        # We build a weighted composite score:
-        #
-        # 40% = 12 month
-        # 30% = 6 month
-        # 20% = 3 month
-        # 10% = 1 month
-        #
-        # Absolute momentum uses only 12-month momentum.
-        #
-        # --------------------------------------------------
+        composite_scores = {}
+        absolute_scores = {}
 
         for ticker in self.assets:
 
             try:
-                
-                try:
-                    mom_21 = Momentum(ticker, ohlcv, length=21)
-                    mom_252 = Momentum(ticker, ohlcv, length=252)
 
-                    log(f"{ticker}: {mom_21}")
-                    log(f"{ticker}: {mom_252}")
-                    continue
-                except Exception as e:
-
-                    log(f"{ticker} error: {e}")
-                mom_252 = Momentum(ticker, ohlcv, length=252)
                 mom_126 = Momentum(ticker, ohlcv, length=126)
                 mom_63 = Momentum(ticker, ohlcv, length=63)
                 mom_21 = Momentum(ticker, ohlcv, length=21)
 
-                if (
-                    not mom_252 or
-                    not mom_126 or
-                    not mom_63 or
-                    not mom_21
-                ):
+                if mom_126 is None or mom_63 is None or mom_21 is None:
                     continue
 
-                m12 = mom_252[-1]
                 m6 = mom_126[-1]
                 m3 = mom_63[-1]
                 m1 = mom_21[-1]
 
+                if (
+                    m6 is None or
+                    m3 is None or
+                    m1 is None
+                ):
+                    continue
+
+                if (
+                    math.isnan(m6) or
+                    math.isnan(m3) or
+                    math.isnan(m1)
+                ):
+                    continue
+
+                # Relative Momentum Ranking Score
                 score = (
-                    0.40 * m12 +
-                    0.30 * m6 +
-                    0.20 * m3 +
-                    0.10 * m1
+                    0.50 * m6 +
+                    0.30 * m3 +
+                    0.20 * m1
                 )
 
                 composite_scores[ticker] = score
-                absolute_momentum[ticker] = m12
+
+                # Absolute Momentum Filter
+                absolute_scores[ticker] = (
+                    0.70 * m6 +
+                    0.30 * m3
+                )
 
             except Exception as e:
-                log(f"Momentum error for {ticker}: {e}")
+                log(f"{ticker} error: {e}")
 
-        # --------------------------------------------------
-        # Safety fallback
-        # --------------------------------------------------
-
-        if len(composite_scores) == 0:
+        # Fallback
+        if len(composite_scores) < 3:
             allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
-        # --------------------------------------------------
-        # Rank risk assets
-        # --------------------------------------------------
-
+        # Rank Risk Assets
         ranked_risk = sorted(
             risk_assets,
             key=lambda x: composite_scores.get(x, -999999),
             reverse=True
         )
 
+        # Rank Defensive Assets
         ranked_defensive = sorted(
             defensive_assets,
             key=lambda x: composite_scores.get(x, -999999),
@@ -165,61 +134,46 @@ class TradingStrategy(Strategy):
 
         best_defensive = ranked_defensive[0]
 
-        top3_risk = ranked_risk[:3]
+        top3 = ranked_risk[:3]
 
         weights = [0.50, 0.30, 0.20]
 
-        # --------------------------------------------------
-        # Dual Momentum Allocation
-        # --------------------------------------------------
-        #
-        # Relative Momentum:
-        #   Top 3 risk assets
-        #
-        # Absolute Momentum:
-        #   12m momentum must be positive
-        #
-        # Otherwise allocate that sleeve
-        # to the strongest defensive asset.
-        #
-        # --------------------------------------------------
+        log(f"Top Risk Assets: {top3}")
+        log(f"Best Defensive Asset: {best_defensive}")
 
-        for asset, weight in zip(top3_risk, weights):
+        for asset, weight in zip(top3, weights):
 
-            if absolute_momentum.get(asset, -999999) > 0:
+            absolute_momentum = absolute_scores.get(asset, -999999)
+
+            if absolute_momentum > 0:
+
                 allocations[asset] += weight
+
+                log(
+                    f"{asset} "
+                    f"ABS={round(absolute_momentum,2)} "
+                    f"-> LONG"
+                )
+
             else:
+
                 allocations[best_defensive] += weight
 
-        # --------------------------------------------------
-        # Diagnostics
-        # --------------------------------------------------
-
-        log(
-            f"Top Risk Assets: "
-            f"{[(a, round(composite_scores.get(a, 0), 2)) for a in top3_risk]}"
-        )
-
-        log(
-            f"Best Defensive Asset: "
-            f"{best_defensive} "
-            f"({round(composite_scores.get(best_defensive, 0), 2)})"
-        )
-
-        # --------------------------------------------------
-        # Final normalization
-        # --------------------------------------------------
+                log(
+                    f"{asset} "
+                    f"ABS={round(absolute_momentum,2)} "
+                    f"-> DEFENSIVE ({best_defensive})"
+                )
 
         total = sum(allocations.values())
 
         if total <= 0:
-            allocations = {asset: 0.0 for asset in self.assets}
             allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
         allocations = {
-            asset: value / total
-            for asset, value in allocations.items()
+            asset: weight / total
+            for asset, weight in allocations.items()
         }
 
         return TargetAllocation(allocations)
