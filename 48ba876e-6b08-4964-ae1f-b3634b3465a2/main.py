@@ -53,7 +53,7 @@ class TradingStrategy(Strategy):
         # Require sufficient history
         # --------------------------------------------------
 
-        if len(ohlcv) < 260:
+        if len(ohlcv) < 1:
             allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
