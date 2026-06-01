@@ -66,7 +66,7 @@ class TradingStrategy(Strategy):
         allocations = {asset: 0.0 for asset in self.assets}
 
         # Need roughly 12 months of trading history
-        if len(ohlcv) < 260:
+        if len(ohlcv) < 1:
             allocations["SHY"] = 1.0
             return TargetAllocation(allocations)
 
