@@ -138,8 +138,8 @@ class TradingStrategy(Strategy):
 
         weights = [0.50, 0.30, 0.20]
 
-        log(f"Top Risk Assets: {top3}")
-        log(f"Best Defensive Asset: {best_defensive}")
+        #log(f"Top Risk Assets: {top3}")
+        #log(f"Best Defensive Asset: {best_defensive}")
 
         for asset, weight in zip(top3, weights):
 
@@ -149,21 +149,13 @@ class TradingStrategy(Strategy):
 
                 allocations[asset] += weight
 
-                log(
-                    f"{asset} "
-                    f"ABS={round(absolute_momentum,2)} "
-                    f"-> LONG"
-                )
+                
 
             else:
 
                 allocations[best_defensive] += weight
 
-                log(
-                    f"{asset} "
-                    f"ABS={round(absolute_momentum,2)} "
-                    f"-> DEFENSIVE ({best_defensive})"
-                )
+                
 
         total = sum(allocations.values())
 
