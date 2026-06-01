@@ -1,54 +1,38 @@
 from surmount.base_class import Strategy, TargetAllocation
 from surmount.logging import log
+from surmount.technical_indicators import Momentum
 
 
 class TradingStrategy(Strategy):
     """
     Tactical Global Dual Momentum Strategy
 
-    Based on Gary Antonacci's Dual Momentum framework:
-
-    1. Absolute Momentum:
-       - Asset must have positive 12-month momentum.
-       - Otherwise capital moves to defensive assets.
-
-    2. Relative Momentum:
-       - Rank all risk assets by 12-month total return.
-       - Allocate to strongest assets.
-
-    3. Risk-Off Regime:
-       - If most risk assets have negative momentum,
-         rotate into defensive assets ranked by momentum.
-
-    Universe includes:
-    - US Equities
-    - International Equities
-    - Bonds
-    - Gold
-    - Dollar
-
-    Designed for monthly-style tactical allocation while
-    running daily inside Surmount.
+    Enhancements:
+    - Composite momentum ranking (12m + 6m + 3m + 1m)
+    - Relative Momentum across risk assets
+    - Absolute Momentum filter on 12m trend
+    - Partial defensive replacement instead of all-or-nothing risk-off
+    - Always holds the top 3 ranked opportunities
     """
 
     @property
     def assets(self):
         return [
             # Risk Assets
-            "SPY",   # S&P 500
-            "RSP",   # Equal Weight S&P 500
-            "QQQ",   # Nasdaq 100
-            "EEM",   # Emerging Markets
-            "VEA",   # Developed Markets
-            "IWM",   # Russell 2000
+            "SPY",
+            "RSP",
+            "QQQ",
+            "EEM",
+            "VEA",
+            "IWM",
 
             # Defensive Assets
-            "TLT",   # Long Treasury
-            "IEF",   # Intermediate Treasury
-            "AGG",   # Aggregate Bond
-            "GLD",   # Gold
-            "UUP",   # US Dollar
-            "BIL"    # Short Treasury / Cash Proxy
+            "TLT",
+            "IEF",
+            "AGG",
+            "GLD",
+            "UUP",
+            "BIL"
         ]
 
     @property
@@ -65,8 +49,11 @@ class TradingStrategy(Strategy):
 
         allocations = {asset: 0.0 for asset in self.assets}
 
-        # Need roughly 12 months of trading history
-        if len(ohlcv) < 1:
+        # --------------------------------------------------
+        # Require sufficient history
+        # --------------------------------------------------
+
+        if len(ohlcv) < 260:
             allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
@@ -88,88 +75,131 @@ class TradingStrategy(Strategy):
             "BIL"
         ]
 
-        momentum = {}
+        composite_scores = {}
+        absolute_momentum = {}
 
         # --------------------------------------------------
-        # 12-Month Momentum Calculation
+        # Momentum Calculation
         # --------------------------------------------------
+        #
+        # Momentum() returns price change over N bars.
+        # We build a weighted composite score:
+        #
+        # 40% = 12 month
+        # 30% = 6 month
+        # 20% = 3 month
+        # 10% = 1 month
+        #
+        # Absolute momentum uses only 12-month momentum.
+        #
+        # --------------------------------------------------
+
         for ticker in self.assets:
 
             try:
-                current_price = ohlcv[-1][ticker]["close"]
-                price_252d = ohlcv[-252][ticker]["close"]
+
+                mom_252 = Momentum(ticker, ohlcv, length=252)
+                mom_126 = Momentum(ticker, ohlcv, length=126)
+                mom_63 = Momentum(ticker, ohlcv, length=63)
+                mom_21 = Momentum(ticker, ohlcv, length=21)
 
                 if (
-                    current_price is None
-                    or price_252d is None
-                    or price_252d <= 0
+                    not mom_252 or
+                    not mom_126 or
+                    not mom_63 or
+                    not mom_21
                 ):
                     continue
 
-                mom = (current_price / price_252d) - 1.0
-                momentum[ticker] = mom
+                m12 = mom_252[-1]
+                m6 = mom_126[-1]
+                m3 = mom_63[-1]
+                m1 = mom_21[-1]
 
-            except Exception:
-                continue
+                score = (
+                    0.40 * m12 +
+                    0.30 * m6 +
+                    0.20 * m3 +
+                    0.10 * m1
+                )
 
+                composite_scores[ticker] = score
+                absolute_momentum[ticker] = m12
+
+            except Exception as e:
+                log(f"Momentum error for {ticker}: {e}")
+
+        # --------------------------------------------------
         # Safety fallback
-        if len(momentum) == 0:
+        # --------------------------------------------------
+
+        if len(composite_scores) == 0:
             allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
         # --------------------------------------------------
-        # Absolute Momentum Filter
+        # Rank risk assets
         # --------------------------------------------------
-        positive_risk_assets = [
-            a for a in risk_assets
-            if momentum.get(a, -999) > 0
-        ]
 
-        # --------------------------------------------------
-        # RISK-ON REGIME
-        # --------------------------------------------------
-        if len(positive_risk_assets) >= 3:
+        ranked_risk = sorted(
+            risk_assets,
+            key=lambda x: composite_scores.get(x, -999999),
+            reverse=True
+        )
 
-            ranked = sorted(
-                positive_risk_assets,
-                key=lambda x: momentum[x],
-                reverse=True
-            )
+        ranked_defensive = sorted(
+            defensive_assets,
+            key=lambda x: composite_scores.get(x, -999999),
+            reverse=True
+        )
 
-            top_assets = ranked[:3]
+        best_defensive = ranked_defensive[0]
 
-            #log(f"Risk-On regime detected")
-            log(f"Top assets: {top_assets}")
+        top3_risk = ranked_risk[:3]
 
-            weights = [0.50, 0.30, 0.20]
-
-            for asset, weight in zip(top_assets, weights):
-                allocations[asset] = weight
+        weights = [0.50, 0.30, 0.20]
 
         # --------------------------------------------------
-        # RISK-OFF REGIME
+        # Dual Momentum Allocation
         # --------------------------------------------------
-        else:
+        #
+        # Relative Momentum:
+        #   Top 3 risk assets
+        #
+        # Absolute Momentum:
+        #   12m momentum must be positive
+        #
+        # Otherwise allocate that sleeve
+        # to the strongest defensive asset.
+        #
+        # --------------------------------------------------
 
-            ranked_defensive = sorted(
-                defensive_assets,
-                key=lambda x: momentum.get(x, -999),
-                reverse=True
-            )
+        for asset, weight in zip(top3_risk, weights):
 
-            top_defensive = ranked_defensive[:3]
+            if absolute_momentum.get(asset, -999999) > 0:
+                allocations[asset] += weight
+            else:
+                allocations[best_defensive] += weight
 
-            #log("Risk-Off regime detected")
-            log(f"Top defensive assets: {top_defensive}")
+        # --------------------------------------------------
+        # Diagnostics
+        # --------------------------------------------------
 
-            weights = [0.50, 0.30, 0.20]
+        log(
+            f"Top Risk Assets: "
+            f"{[(a, round(composite_scores.get(a, 0), 2)) for a in top3_risk]}"
+        )
 
-            for asset, weight in zip(top_defensive, weights):
-                allocations[asset] = weight
+        log(
+            f"Best Defensive Asset: "
+            f"{best_defensive} "
+            f"({round(composite_scores.get(best_defensive, 0), 2)})"
+        )
 
         # --------------------------------------------------
         # Final normalization
         # --------------------------------------------------
+
         total = sum(allocations.values())
 
         if total <= 0:
@@ -178,8 +208,8 @@ class TradingStrategy(Strategy):
             return TargetAllocation(allocations)
 
         allocations = {
-            asset: weight / total
-            for asset, weight in allocations.items()
+            asset: value / total
+            for asset, value in allocations.items()
         }
 
         return TargetAllocation(allocations)
