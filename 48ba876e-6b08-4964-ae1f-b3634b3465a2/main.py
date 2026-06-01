@@ -99,11 +99,12 @@ class TradingStrategy(Strategy):
             try:
                 
                 try:
-
+                    mom_21 = Momentum(ticker, ohlcv, length=21)
                     mom_252 = Momentum(ticker, ohlcv, length=252)
 
+                    log(f"{ticker}: {mom_21}")
                     log(f"{ticker}: {mom_252}")
-
+                    continue
                 except Exception as e:
 
                     log(f"{ticker} error: {e}")
