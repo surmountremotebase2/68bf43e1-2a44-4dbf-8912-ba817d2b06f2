@@ -85,7 +85,7 @@ class TradingStrategy(Strategy):
             "AGG",
             "GLD",
             "UUP",
-            "SHY"
+            "BIL"
         ]
 
         momentum = {}
