@@ -149,7 +149,7 @@ class TradingStrategy(Strategy):
         else:
 
             # Defensive allocation
-            allocations["SHY"] = 1.0
+            allocations["BIL"] = 1.0
 
             log("No bullish assets detected")
 
@@ -159,7 +159,7 @@ class TradingStrategy(Strategy):
         total_weight = sum(allocations.values())
 
         if total_weight <= 0:
-            return TargetAllocation({"SHY": 1.0})
+            return TargetAllocation({"BIL": 1.0})
 
         normalized_allocations = {
             k: v / total_weight
