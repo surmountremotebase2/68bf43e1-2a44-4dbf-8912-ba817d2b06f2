@@ -138,7 +138,7 @@ class TradingStrategy(Strategy):
 
             top_assets = ranked[:3]
 
-            log(f"Risk-On regime detected")
+            #log(f"Risk-On regime detected")
             log(f"Top assets: {top_assets}")
 
             weights = [0.50, 0.30, 0.20]
@@ -159,7 +159,7 @@ class TradingStrategy(Strategy):
 
             top_defensive = ranked_defensive[:3]
 
-            log("Risk-Off regime detected")
+            #log("Risk-Off regime detected")
             log(f"Top defensive assets: {top_defensive}")
 
             weights = [0.50, 0.30, 0.20]
