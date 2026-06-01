@@ -97,7 +97,16 @@ class TradingStrategy(Strategy):
         for ticker in self.assets:
 
             try:
+                
+                try:
 
+                    mom_252 = Momentum(ticker, ohlcv, length=252)
+
+                    log(f"{ticker}: {mom_252}")
+
+                except Exception as e:
+
+                    log(f"{ticker} error: {e}")
                 mom_252 = Momentum(ticker, ohlcv, length=252)
                 mom_126 = Momentum(ticker, ohlcv, length=126)
                 mom_63 = Momentum(ticker, ohlcv, length=63)
