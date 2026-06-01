@@ -48,7 +48,7 @@ class TradingStrategy(Strategy):
             "AGG",   # Aggregate Bond
             "GLD",   # Gold
             "UUP",   # US Dollar
-            "SHY"    # Short Treasury / Cash Proxy
+            "BIL"    # Short Treasury / Cash Proxy
         ]
 
     @property
@@ -67,7 +67,7 @@ class TradingStrategy(Strategy):
 
         # Need roughly 12 months of trading history
         if len(ohlcv) < 1:
-            allocations["SHY"] = 1.0
+            allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
         risk_assets = [
@@ -114,7 +114,7 @@ class TradingStrategy(Strategy):
 
         # Safety fallback
         if len(momentum) == 0:
-            allocations["SHY"] = 1.0
+            allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
         # --------------------------------------------------
@@ -174,7 +174,7 @@ class TradingStrategy(Strategy):
 
         if total <= 0:
             allocations = {asset: 0.0 for asset in self.assets}
-            allocations["SHY"] = 1.0
+            allocations["BIL"] = 1.0
             return TargetAllocation(allocations)
 
         allocations = {
