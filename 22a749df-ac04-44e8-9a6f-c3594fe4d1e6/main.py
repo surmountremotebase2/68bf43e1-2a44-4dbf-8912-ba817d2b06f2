@@ -86,13 +86,13 @@ class TradingStrategy(Strategy):
             allocation[self.defensive_asset] = 1.0
             return TargetAllocation(allocation)
             
-        log(f"TIP Canary Momentum: {tip_momentum:.4f}")
+        #log(f"TIP Canary Momentum: {tip_momentum:.4f}")
         
         # 2. Strategy Routing
         if tip_momentum <= 0:
             # CRASH PROTECTION: Canary momentum is negative.
             # Allocate 100% to the defensive asset (BIL / Cash equivalent)
-            log("Canary indicates downtrend. Shifting 100% to defensive asset.")
+            #log("Canary indicates downtrend. Shifting 100% to defensive asset.")
             allocation[self.defensive_asset] = 1.0
             
         else:
@@ -113,19 +113,19 @@ class TradingStrategy(Strategy):
             
             if len(top_assets) == 0:
                 # If no offensive assets have positive momentum, default to defensive
-                log("No offensive assets with positive momentum. Shifting to defensive asset.")
+                #log("No offensive assets with positive momentum. Shifting to defensive asset.")
                 allocation[self.defensive_asset] = 1.0
             else:
                 # Allocate equally among the top assets (25% max per asset)
                 weight_per_asset = 0.25
                 for asset in top_assets:
                     allocation[asset] = weight_per_asset
-                    log(f"Allocating {weight_per_asset*100}% to {asset} (Mom: {offensive_momenta[asset]:.4f})")
+                    #log(f"Allocating {weight_per_asset*100}% to {asset} (Mom: {offensive_momenta[asset]:.4f})")
                 
                 # If there are fewer than 4 positive assets, the remainder goes to the defensive asset
                 remaining_weight = 1.0 - (len(top_assets) * weight_per_asset)
                 if remaining_weight > 0:
                     allocation[self.defensive_asset] = remaining_weight
-                    log(f"Allocating remainder {remaining_weight*100}% to {self.defensive_asset}")
+                    #log(f"Allocating remainder {remaining_weight*100}% to {self.defensive_asset}")
 
         return TargetAllocation(allocation)
