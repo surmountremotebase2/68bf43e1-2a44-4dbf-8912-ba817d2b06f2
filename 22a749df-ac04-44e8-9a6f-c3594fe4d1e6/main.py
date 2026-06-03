@@ -26,30 +26,47 @@ class TradingStrategy(Strategy):
         return self.data_list
 
     def calculate_momentum(self, ticker, data):
-        """
-        Calculates the average of 1, 3, 6, and 12-month returns.
-        Approximated as 21, 63, 126, and 252 trading days.
-        """
-        # Edge case: Insufficient data history
-        if len(data) < 252:
-            return None
-        
-        # Retrieve historical closes
-        p_curr = data[-1][ticker]["close"]
-        p_1m = data[-21][ticker]["close"]
-        p_3m = data[-63][ticker]["close"]
-        p_6m = data[-126][ticker]["close"]
-        p_12m = data[-252][ticker]["close"]
-        
-        # Calculate individual timeframe returns
-        ret_1m = (p_curr / p_1m) - 1
-        ret_3m = (p_curr / p_3m) - 1
-        ret_6m = (p_curr / p_6m) - 1
-        ret_12m = (p_curr / p_12m) - 1
-        
-        # Return the blended momentum score
-        return (ret_1m + ret_3m + ret_6m + ret_12m) / 4.0
+            """
+            Calculates the average of 1, 3, 6, and 12-month returns.
+            Dynamically adapts if less than 252 days of data are available.
+            """
+            # We need at least a minimal window (e.g., 21 days) to start doing anything useful.
+            # Until then, we stay in the defensive asset.
+            if len(data) < 21:
+                return None
+                
+            # Safely ensure the ticker actually traded on the current day
+            if ticker not in data[-1]:
+                return None
+                
+            p_curr = data[-1][ticker]["close"]
+            
+            # Dynamically determine the negative index for historical lookbacks.
+            # Python uses 1-based indexing from the end (e.g., data[-1] is today).
+            # We cap the index at len(data) so we never throw an IndexError.
+            idx_1m = min(22, len(data))
+            idx_3m = min(64, len(data))
+            idx_6m = min(127, len(data))
+            idx_12m = min(253, len(data))
+            
+            # Safely fetch historical prices using .get(). 
+            # If a ticker didn't trade on that specific past day, we fallback to p_curr 
+            # so its return calculation neutralizes to 0 for that specific timeframe.
+            p_1m = data[-idx_1m].get(ticker, {}).get("close", p_curr)
+            p_3m = data[-idx_3m].get(ticker, {}).get("close", p_curr)
+            p_6m = data[-idx_6m].get(ticker, {}).get("close", p_curr)
+            p_12m = data[-idx_12m].get(ticker, {}).get("close", p_curr)
+            
+            # Calculate individual timeframe returns (safeguard against division by zero)
+            ret_1m = (p_curr / p_1m) - 1 if p_1m > 0 else 0
+            ret_3m = (p_curr / p_3m) - 1 if p_3m > 0 else 0
+            ret_6m = (p_curr / p_6m) - 1 if p_6m > 0 else 0
+            ret_12m = (p_curr / p_12m) - 1 if p_12m > 0 else 0
+            
+            # Return the blended momentum score
+            return (ret_1m + ret_3m + ret_6m + ret_12m) / 4.0
 
+            
     def run(self, data):
         ohlcv = data["ohlcv"]
         
