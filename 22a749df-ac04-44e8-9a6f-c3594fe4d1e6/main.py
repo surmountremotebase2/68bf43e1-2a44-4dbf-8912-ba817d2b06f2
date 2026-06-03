@@ -57,7 +57,7 @@ class TradingStrategy(Strategy):
         allocation = {ticker: 0.0 for ticker in self.tickers}
         
         # Edge case: Need at least 252 days of data to calculate the 12-month return
-        if len(ohlcv) < 252:
+        if len(ohlcv) < 1:
             log("Insufficient data to calculate 12-month momentum. Defaulting to defensive asset.")
             allocation[self.defensive_asset] = 1.0
             return TargetAllocation(allocation)
