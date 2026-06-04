@@ -1,1 +1,1 @@
-{}
+{"groups": {}, "interval": "1day", "assets": ["WIMA"], "strategy": [{"type": "IF", "conditions": [{"type": "BINARY", "first": {"name": "EMA", "args": {"ticker": "WIMA", "length": "10"}, "advanced": {}}, "second": {"name": "EMA", "args": {"length": "1", "ticker": "WIMA"}}, "comp": "<", "operator": ""}], "if_action": {"type": "ACTION", "steps": [{"action": "allocation", "asset": "WIMA", "amount": "100"}]}, "else_action": {"type": "ACTION", "steps": [{"action": "allocation", "asset": "WIMA", "amount": "0"}]}}]}
