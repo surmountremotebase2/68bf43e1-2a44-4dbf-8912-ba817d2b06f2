@@ -4,7 +4,7 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
     def __init__(self):
         # Asset Universes based on Hybrid Asset Allocation (HAA)
-        self.offensive_assets = ["SPY", "IWM", "VEA", "VWO", "VNQ", "DBC", "IEF", "TLT"]
+        self.offensive_assets = ["SPY", "IWM", "VEA", "VWO", "VNQ", "DBC", "IEF", "TLT", "GLD"]
         self.canary_asset = "TIP"
         self.defensive_asset = "BIL"
         
