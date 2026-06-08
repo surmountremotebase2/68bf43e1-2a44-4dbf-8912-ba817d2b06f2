@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
         # 100-BAR VWAP TREND FILTER REGIME
         # =====================================================
         try:
-            vwap_series = VWAP(ticker, ohlcv_list, length=50)
+            vwap_series = VWAP(ticker, ohlcv_list, length=100)
             
             # Defensive check for invalid indicator structures
             if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
@@ -75,13 +75,13 @@ class TradingStrategy(Strategy):
         # =====================================================
         
         if current_close > opening_high and current_close < latest_vwap:
-            log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
+            #log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
             allocation = 1.0
             
         # Bearish Breakdown: Close drops underneath the opening range lower boundaries
-        elif current_close < opening_low:
-            log(f"ORB Bearish Breakdown: Close ({current_close}) < Opening Low ({opening_low}). Staying Flat.")
-            allocation = 0.0
+        #elif current_close < opening_low:
+            #log(f"ORB Bearish Breakdown: Close ({current_close}) < Opening Low ({opening_low}). Staying Flat.")
+            #allocation = 0.0
             
         # Inside Range State-Machine: Check whether we broken out earlier in the day to hold the position
         else:
@@ -89,7 +89,7 @@ class TradingStrategy(Strategy):
             # Maintain long position only if the previous hour was an active breakout state 
             # AND we remain securely above the 100-period VWAP filter benchmark.
             if prev_bar["close"] > opening_high and current_close > latest_vwap:
-                log("Maintaining active macro-supported breakout position inside the range.")
+                #log("Maintaining active macro-supported breakout position inside the range.")
                 allocation = 1.0
             else:
                 allocation = 0.0
