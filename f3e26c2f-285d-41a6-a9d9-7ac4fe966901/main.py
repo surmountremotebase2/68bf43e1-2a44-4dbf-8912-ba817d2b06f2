@@ -6,12 +6,12 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
 
     def __init__(self):
-        self.signal_ticker = "TQQQ"
-        self.trade_ticker = "TQQQ"
+        self.signal_ticker = "QQQ"
+        self.trade_ticker = "QQQ"
 
     @property
     def assets(self):
-        return ["QQQ", "TQQQ"]
+        return ["QQQ"]
 
     @property
     def interval(self):
@@ -22,7 +22,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         if ohlcv is None or len(ohlcv) < 1:
-            return TargetAllocation({"TQQQ": 0})
+            return TargetAllocation({self.trade_ticker: 0})
 
         try:
             qqq_vwap = VWAP(
@@ -36,11 +36,11 @@ class TradingStrategy(Strategy):
                 or len(qqq_vwap) == 0
                 or qqq_vwap[-1] is None
             ):
-                return TargetAllocation({"TQQQ": 0})
+                return TargetAllocation({self.trade_ticker: 0})
 
         except Exception as e:
             log(f"VWAP error: {str(e)}")
-            return TargetAllocation({"TQQQ": 0})
+            return TargetAllocation({self.trade_ticker: 0})
 
         current_date = (
             ohlcv[-1][self.signal_ticker]["date"]
@@ -57,7 +57,7 @@ class TradingStrategy(Strategy):
                 current_day_bars.append(bar[self.signal_ticker])
 
         if len(current_day_bars) < 1:
-            return TargetAllocation({"TQQQ": 0})
+            return TargetAllocation({self.trade_ticker: 0})
 
         opening_bar = current_day_bars[0]
 
