@@ -1,4 +1,5 @@
 from surmount.base_class import Strategy, TargetAllocation
+from surmount.technical_indicators import VWAP
 from surmount.logging import log
 
 class TradingStrategy(Strategy):
@@ -13,66 +14,90 @@ class TradingStrategy(Strategy):
 
     @property
     def interval(self):
-        """Using 1-hour intervals to capture the opening range structure cleanly."""
+        """Using 1-hour intervals for clear intraday opening range definitions."""
         return "1hour"
 
     def run(self, data):
         """
-        Executes the logic for the Opening Range Breakout (ORB) strategy.
-        Identifies the first candle of the current trading day to set High/Low boundaries,
-        then checks subsequent intraday candles for breakout confirmations.
+        Executes the logic for the Opening Range Breakout (ORB) strategy
+        coupled with a 100-bar VWAP regime trend filter.
         """
         ohlcv_list = data["ohlcv"]
         ticker = self.ticker
         
-        # Edge case: Ensure there is enough historical data to analyze
-        if len(ohlcv_list) < 1:
+        # Ensure we have enough bars to calculate the 100-period VWAP 
+        # and capture the session's historical backdrop.
+        if ohlcv_list is None or len(ohlcv_list) < 105:
             return TargetAllocation({ticker: 0})
             
-        # Get the current bar's data and isolate the current date string (YYYY-MM-DD)
+        # Get current candle details
         current_bar = ohlcv_list[-1][ticker]
+        current_close = current_bar["close"]
         current_date_str = current_bar["date"].split(" ")[0] 
         
-        # Filter all candles belonging strictly to the current trading day
+        # =====================================================
+        # 100-BAR VWAP TREND FILTER REGIME
+        # =====================================================
+        try:
+            vwap_series = VWAP(ticker, ohlcv_list, length=100)
+            
+            # Defensive check for invalid indicator structures
+            if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
+                log(f"Insufficient or invalid VWAP data for {ticker}. Remaining flat.")
+                return TargetAllocation({ticker: 0})
+                
+            latest_vwap = vwap_series[-1]
+            
+        except Exception as e:
+            log(f"Error calculating VWAP indicator: {str(e)}")
+            return TargetAllocation({ticker: 0})
+
+        # Filter all candles belonging strictly to the current day's market session
         current_day_bars = []
         for bar in ohlcv_list:
             if bar[ticker]["date"].startswith(current_date_str):
                 current_day_bars.append(bar[ticker])
         
-        # Edge case: If this is the first bar of the day, we are currently establishing 
-        # the opening range boundaries. No trades can be placed yet.
+        # Edge Case: If this is the first bar of the day, we are mapping the opening range.
         if len(current_day_bars) <= 1:
-            log(f"Establishing opening range boundaries for {current_date_str}")
+            log(f"Mapping initial opening range boundaries for session: {current_date_str}")
             return TargetAllocation({ticker: 0})
         
-        # Define the Opening Range boundaries using the first bar of the session
+        # Establish Opening Range limits using the session's first candle
         opening_bar = current_day_bars[0]
         opening_high = opening_bar["high"]
         opening_low = opening_bar["low"]
         
-        current_close = current_bar["close"]
         allocation = 0.0
+
+        # =====================================================
+        # CORE EXECUTION LOGIC WITH VWAP FILTER
+        # =====================================================
         
-        # --- ORB Execution Logic ---
-        # 1. Bullish Breakout: If the current close breaks above the opening high, go long.
-        if current_close > opening_high:
-            log(f"ORB Bullish Breakout Confirmed: Close ({current_close}) > Opening High ({opening_high})")
-            allocation = 1.0
-            
-        # 2. Bearish Breakdown / Stop Loss: If the price falls below the opening low, stay out.
-        elif current_close < opening_low:
-            log(f"ORB Bearish Breakdown/Stop Out: Close ({current_close}) < Opening Low ({opening_low})")
+        # Strict Regressive Filter: If price is underneath the 100-bar VWAP, avoid longs completely
+        if current_close < latest_vwap:
+            log(f"Filter Triggered: Price ({current_close}) below 100-bar VWAP ({latest_vwap:.2f}). No Long Trades.")
             allocation = 0.0
             
-        # 3. Inside Range: If the current price is inside the opening range, check if we 
-        # broke out in the previous hour to maintain the trend holding state.
+        # Bullish Breakout: Close exceeds opening high AND sits safely above the 100-bar VWAP
+        elif current_close > opening_high:
+            log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
+            allocation = 1.0
+            
+        # Bearish Breakdown: Close drops underneath the opening range lower boundaries
+        elif current_close < opening_low:
+            log(f"ORB Bearish Breakdown: Close ({current_close}) < Opening Low ({opening_low}). Staying Flat.")
+            allocation = 0.0
+            
+        # Inside Range State-Machine: Check whether we broken out earlier in the day to hold the position
         else:
             prev_bar = current_day_bars[-2]
-            if prev_bar["close"] > opening_high:
-                log("Maintaining active long position from prior breakout hour.")
+            # Maintain long position only if the previous hour was an active breakout state 
+            # AND we remain securely above the 100-period VWAP filter benchmark.
+            if prev_bar["close"] > opening_high and current_close > latest_vwap:
+                log("Maintaining active macro-supported breakout position inside the range.")
                 allocation = 1.0
             else:
                 allocation = 0.0
 
-        # Return the finalized target allocation dictionary wrapped inside TargetAllocation
         return TargetAllocation({ticker: allocation})
