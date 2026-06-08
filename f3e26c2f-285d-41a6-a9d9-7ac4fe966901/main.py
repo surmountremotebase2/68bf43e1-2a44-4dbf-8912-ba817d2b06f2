@@ -74,7 +74,7 @@ class TradingStrategy(Strategy):
         # CORE EXECUTION LOGIC WITH VWAP FILTER
         # =====================================================
         
-        if current_close > opening_high and current_close < latest_vwap:
+        if current_close > opening_high and current_close > latest_vwap:
             #log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
             allocation = 1.0
             
