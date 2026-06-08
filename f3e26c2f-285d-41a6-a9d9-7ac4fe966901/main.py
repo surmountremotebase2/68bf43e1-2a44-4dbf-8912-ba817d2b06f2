@@ -6,7 +6,7 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
 
     def __init__(self):
-        self.signal_ticker = "QQQ"
+        self.signal_ticker = "TQQQ"
         self.trade_ticker = "TQQQ"
 
     @property
