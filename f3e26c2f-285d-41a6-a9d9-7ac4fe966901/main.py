@@ -80,7 +80,7 @@ class TradingStrategy(Strategy):
             allocation = 1.0
         else:
             prev_bar = current_day_bars[-2]
-            if prev_bar["close"] > opening_high and current_close < latest_vwap:
+            if prev_bar["close"] > opening_high or current_close > latest_vwap:
                 allocation = 1.0
             else:
                 allocation = 0.0
