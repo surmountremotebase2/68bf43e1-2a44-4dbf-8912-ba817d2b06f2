@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
         # 100-BAR VWAP TREND FILTER REGIME
         # =====================================================
         try:
-            vwap_series = VWAP(ticker, ohlcv_list, length=10)
+            vwap_series = VWAP(ticker, ohlcv_list, length=50)
             
             # Defensive check for invalid indicator structures
             if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
