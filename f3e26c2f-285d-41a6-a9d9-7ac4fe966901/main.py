@@ -21,7 +21,7 @@ class TradingStrategy(Strategy):
 
         ohlcv = data["ohlcv"]
 
-        if ohlcv is None or len(ohlcv) < 60:
+        if ohlcv is None or len(ohlcv) < 1:
             return TargetAllocation({"TQQQ": 0})
 
         try:
@@ -56,7 +56,7 @@ class TradingStrategy(Strategy):
             ):
                 current_day_bars.append(bar[self.signal_ticker])
 
-        if len(current_day_bars) < 2:
+        if len(current_day_bars) < 1:
             return TargetAllocation({"TQQQ": 0})
 
         opening_bar = current_day_bars[0]
