@@ -5,7 +5,7 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
     def __init__(self):
         # Define the target asset for the ORB strategy
-        self.ticker = "QQQ"
+        self.ticker = "TQQQ"
 
     @property
     def assets(self):
