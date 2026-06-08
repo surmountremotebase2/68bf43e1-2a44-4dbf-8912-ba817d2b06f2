@@ -1,6 +1,3 @@
-Here is the updated version of your strategy. The class now requests data for both **SPY** and **QQQ** inside the `assets` property. The `run` method evaluates all opening range parameters, boundaries, and VWAP conditions using **SPY** as the signal, while applying the final asset allocation to **QQQ**.
-
-```python
 from surmount.base_class import Strategy, TargetAllocation
 from surmount.technical_indicators import VWAP
 from surmount.logging import log
@@ -90,5 +87,3 @@ class TradingStrategy(Strategy):
 
         # Return target allocation designated entirely to the execution asset (QQQ)
         return TargetAllocation({trade: allocation})
-
-```
