@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
         # 100-BAR VWAP TREND FILTER REGIME
         # =====================================================
         try:
-            vwap_series = VWAP(ticker, ohlcv_list, length=200)
+            vwap_series = VWAP(ticker, ohlcv_list, length=20)
             
             # Defensive check for invalid indicator structures
             if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
@@ -74,7 +74,7 @@ class TradingStrategy(Strategy):
         # CORE EXECUTION LOGIC WITH VWAP FILTER
         # =====================================================
         
-        if current_close > opening_high and current_close > latest_vwap:
+        if current_close > opening_high and current_close < latest_vwap:
             #log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
             allocation = 1.0
             
@@ -88,7 +88,7 @@ class TradingStrategy(Strategy):
             prev_bar = current_day_bars[-2]
             # Maintain long position only if the previous hour was an active breakout state 
             # AND we remain securely above the 100-period VWAP filter benchmark.
-            if prev_bar["close"] > opening_high and current_close > latest_vwap:
+            if prev_bar["close"] > opening_high and current_close < latest_vwap:
                 #log("Maintaining active macro-supported breakout position inside the range.")
                 allocation = 1.0
             else:
