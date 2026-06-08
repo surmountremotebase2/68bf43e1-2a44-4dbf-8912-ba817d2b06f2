@@ -27,7 +27,7 @@ class TradingStrategy(Strategy):
         
         # Ensure we have enough bars to calculate the 100-period VWAP 
         # and capture the session's historical backdrop.
-        if ohlcv_list is None or len(ohlcv_list) < 105:
+        if ohlcv_list is None or len(ohlcv_list) < 1:
             return TargetAllocation({ticker: 0})
             
         # Get current candle details
@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
         # 100-BAR VWAP TREND FILTER REGIME
         # =====================================================
         try:
-            vwap_series = VWAP(ticker, ohlcv_list, length=100)
+            vwap_series = VWAP(ticker, ohlcv_list, length=200)
             
             # Defensive check for invalid indicator structures
             if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
