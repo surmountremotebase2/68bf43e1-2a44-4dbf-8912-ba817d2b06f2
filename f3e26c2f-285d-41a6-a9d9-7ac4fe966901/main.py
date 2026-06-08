@@ -60,7 +60,7 @@ class TradingStrategy(Strategy):
         
         # Edge Case: If this is the first bar of the day, we are mapping the opening range.
         if len(current_day_bars) <= 1:
-            log(f"Mapping initial opening range boundaries for session: {current_date_str}")
+            #log(f"Mapping initial opening range boundaries for session: {current_date_str}")
             return TargetAllocation({ticker: 0})
         
         # Establish Opening Range limits using the session's first candle
