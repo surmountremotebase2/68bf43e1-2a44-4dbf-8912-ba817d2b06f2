@@ -74,13 +74,7 @@ class TradingStrategy(Strategy):
         # CORE EXECUTION LOGIC WITH VWAP FILTER
         # =====================================================
         
-        # Strict Regressive Filter: If price is underneath the 100-bar VWAP, avoid longs completely
-        if current_close > latest_vwap:
-            log(f"Filter Triggered: Price ({current_close}) below 100-bar VWAP ({latest_vwap:.2f}). No Long Trades.")
-            allocation = 0.0
-            
-        # Bullish Breakout: Close exceeds opening high AND sits safely above the 100-bar VWAP
-        elif current_close > opening_high and current_close < latest_vwap:
+        if current_close > opening_high and current_close < latest_vwap:
             log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
             allocation = 1.0
             
