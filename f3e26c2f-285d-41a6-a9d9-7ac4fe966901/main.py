@@ -39,7 +39,7 @@ class TradingStrategy(Strategy):
         # 100-BAR VWAP TREND FILTER REGIME
         # =====================================================
         try:
-            vwap_series = VWAP(ticker, ohlcv_list, length=200)
+            vwap_series = VWAP(ticker, ohlcv_list, length=50)
             
             # Defensive check for invalid indicator structures
             if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
@@ -75,12 +75,12 @@ class TradingStrategy(Strategy):
         # =====================================================
         
         # Strict Regressive Filter: If price is underneath the 100-bar VWAP, avoid longs completely
-        if current_close < latest_vwap:
+        if current_close > latest_vwap:
             log(f"Filter Triggered: Price ({current_close}) below 100-bar VWAP ({latest_vwap:.2f}). No Long Trades.")
             allocation = 0.0
             
         # Bullish Breakout: Close exceeds opening high AND sits safely above the 100-bar VWAP
-        elif current_close > opening_high:
+        elif current_close > opening_high and current_close < latest_vwap:
             log(f"ORB Long Confirmed: Close ({current_close}) > Opening High ({opening_high}) & Above VWAP.")
             allocation = 1.0
             
