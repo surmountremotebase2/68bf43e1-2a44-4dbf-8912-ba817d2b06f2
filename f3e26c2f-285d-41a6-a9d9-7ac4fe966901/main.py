@@ -6,12 +6,12 @@ from surmount.logging import log
 class TradingStrategy(Strategy):
 
     def __init__(self):
-        self.signal_ticker = "QQQ"
-        self.trade_ticker = "TECL"
+        self.signal_ticker = "SPY"
+        self.trade_ticker = "QQQ"
 
     @property
     def assets(self):
-        return ["QQQ", "TECL"]
+        return ["QQQ", "SPY"]
 
     @property
     def interval(self):
