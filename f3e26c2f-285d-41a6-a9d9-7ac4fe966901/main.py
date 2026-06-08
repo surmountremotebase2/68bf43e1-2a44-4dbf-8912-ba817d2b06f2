@@ -7,11 +7,11 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         self.signal_ticker = "QQQ"
-        self.trade_ticker = "QQQ"
+        self.trade_ticker = "TECL"
 
     @property
     def assets(self):
-        return ["QQQ"]
+        return ["QQQ", "TECL"]
 
     @property
     def interval(self):
