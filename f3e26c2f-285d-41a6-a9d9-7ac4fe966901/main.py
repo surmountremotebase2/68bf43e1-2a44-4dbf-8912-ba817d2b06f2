@@ -44,7 +44,7 @@ class TradingStrategy(Strategy):
         # 50-BAR VWAP TREND FILTER REGIME (Calculated on SPY)
         # =====================================================
         try:
-            vwap_series = VWAP(signal, ohlcv_list, length=100)
+            vwap_series = VWAP(signal, ohlcv_list, length=30)
             
             if vwap_series is None or len(vwap_series) == 0 or vwap_series[-1] is None:
                 log(f"Insufficient or invalid VWAP data for {signal}. Remaining flat.")
