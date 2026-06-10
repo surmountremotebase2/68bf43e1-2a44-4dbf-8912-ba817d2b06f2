@@ -155,7 +155,7 @@ class TradingStrategy(Strategy):
         ) / current_close
 
         # Avoid chasing already-expanded sessions
-        if opening_range_pct > (0.10 * atr_pct):
+        if opening_range_pct > (0.70 * atr_pct):
             return TargetAllocation({trade: 0})
 
         # =====================================================
