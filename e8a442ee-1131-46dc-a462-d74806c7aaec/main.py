@@ -88,7 +88,7 @@ class TradingStrategy(Strategy):
             vwap_series = VWAP(
                 signal,
                 ohlcv_list,
-                length=250
+                length=50
             )
 
             if (
@@ -155,7 +155,7 @@ class TradingStrategy(Strategy):
         ) / current_close
 
         # Avoid chasing already-expanded sessions
-        if opening_range_pct > (0.70 * atr_pct):
+        if opening_range_pct > (1 * atr_pct):
             return TargetAllocation({trade: 0})
 
         # =====================================================
