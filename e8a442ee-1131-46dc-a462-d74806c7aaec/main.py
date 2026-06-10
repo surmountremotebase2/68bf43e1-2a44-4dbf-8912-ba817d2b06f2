@@ -68,7 +68,7 @@ class TradingStrategy(Strategy):
 
         ohlcv_list = data["ohlcv"]
 
-        if ohlcv_list is None or len(ohlcv_list) < 50:
+        if ohlcv_list is None or len(ohlcv_list) < 1:
             return TargetAllocation({trade: 0})
 
         if signal not in ohlcv_list[-1]:
