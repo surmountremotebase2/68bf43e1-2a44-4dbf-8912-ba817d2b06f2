@@ -88,7 +88,7 @@ class TradingStrategy(Strategy):
             vwap_series = VWAP(
                 signal,
                 ohlcv_list,
-                length=50
+                length=250
             )
 
             if (
