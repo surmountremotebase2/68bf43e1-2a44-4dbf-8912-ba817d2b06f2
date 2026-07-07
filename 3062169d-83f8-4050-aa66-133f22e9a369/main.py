@@ -1,5 +1,4 @@
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.technical_indicators import SMA
 from surmount.data import MedianCPI
 from surmount.logging import log
 from datetime import datetime
@@ -7,6 +6,20 @@ import math
 
 
 class TradingStrategy(Strategy):
+    """
+    FixedIncome500 v3 — pure fixed-income dual momentum.
+
+    - Universe: treasuries across the curve, IG credit, HY credit,
+      TIPS, T-bills. No equities, no commodities.
+    - Ranking: 3/6/12-month composite momentum.
+    - Gate: 6-month EXCESS return vs BIL (cash) must be positive.
+    - Risk scaling: gross exposure = fraction of candidates
+      beating cash over 3 months (graded, not binary).
+    - CPI regime: median CPI > 4% removes long duration.
+    - Rebalance: first trading day of each ISO week with
+      weekday >= Thursday. Deterministic per calendar date.
+    """
+
     def __init__(self):
         self.tickers = [
             "TLT",  # Long-term treasuries (20+ yr)
@@ -15,14 +28,12 @@ class TradingStrategy(Strategy):
             "TIP",  # TIPS (inflation hedge)
             "HYG",  # High yield corporate
             "SHY",  # Short-term treasuries (1-3 yr)
-            "BIL",  # Ultra-short T-Bills (1-3 mo)
-            "GLD",  # Gold (tail-risk hedge)
+            "BIL",  # Ultra-short T-Bills (cash proxy)
             "SPY",  # Benchmark only — never allocated
         ]
         self.data_list = [MedianCPI()]
-        self.min_bars = 140
-        # Calendar-anchored rebalance state.
-        # (iso_year, iso_week) of the last executed rebalance.
+        self.min_bars = 270  # 252d lookback + buffer
+        self.top_n = 3
         self.last_rebalance_week = None
         self.last_allocation = None
 
@@ -54,7 +65,6 @@ class TradingStrategy(Strategy):
         return closes
 
     def get_bar_date(self, ohlcv):
-        """Date of the current (last) bar as 'YYYY-MM-DD', or None."""
         last = ohlcv[-1]
         for t in self.tickers:
             try:
@@ -74,10 +84,17 @@ class TradingStrategy(Strategy):
         return (prices[-1] / prev) - 1.0
 
     def composite_momentum(self, prices):
-        m1 = self.momentum(prices, 21)
         m3 = self.momentum(prices, 63)
         m6 = self.momentum(prices, 126)
-        return 0.35 * m1 + 0.35 * m3 + 0.30 * m6
+        m12 = self.momentum(prices, 252)
+        return 0.30 * m3 + 0.35 * m6 + 0.35 * m12
+
+    def excess_momentum(self, prices, cash_prices, lookback):
+        """Asset return minus cash (BIL) return over lookback."""
+        return (
+            self.momentum(prices, lookback)
+            - self.momentum(cash_prices, lookback)
+        )
 
     def realized_vol(self, prices, lookback=63):
         if len(prices) < lookback + 1:
@@ -95,17 +112,7 @@ class TradingStrategy(Strategy):
             return None
         return ann_vol
 
-    def is_above_sma(self, ticker, ohlcv, closes, length):
-        try:
-            sma = SMA(ticker, ohlcv, length=length)
-            if sma and len(sma) > 0 and sma[-1] is not None:
-                return closes[-1] > sma[-1]
-        except Exception:
-            pass
-        return False
-
     def park_in_cash(self, allocation):
-        """Warmup / insufficient-data state: 100% BIL, no dead cash."""
         parked = {t: 0.0 for t in allocation}
         parked["BIL"] = 1.0
         return TargetAllocation(parked)
@@ -120,14 +127,7 @@ class TradingStrategy(Strategy):
             if len(ohlcv) < self.min_bars:
                 return self.park_in_cash(allocation)
 
-            # ================================================
-            # THURSDAY-ANCHORED WEEKLY REBALANCE
-            # Rebalance on the first trading day of each ISO
-            # week that is Thursday or later (Thu=4). If
-            # Thursday is a holiday, Friday triggers instead.
-            # Pure function of the calendar date — identical
-            # decisions regardless of backtest start date.
-            # ================================================
+            # ------ Thursday-anchored weekly rebalance ------
             date_str = self.get_bar_date(ohlcv)
             week_key = None
             if date_str is not None:
@@ -139,116 +139,91 @@ class TradingStrategy(Strategy):
                     and week_key != self.last_rebalance_week
                 )
             else:
-                # No date available — fail open and rebalance.
-                do_rebalance = True
+                do_rebalance = True  # fail open
 
             if not do_rebalance:
                 if self.last_allocation is not None:
                     return TargetAllocation(self.last_allocation)
-                # No allocation yet (pre-first-Thursday): park.
                 return self.park_in_cash(allocation)
 
             closes = {t: self.get_closes(ohlcv, t) for t in self.tickers}
             for t in self.tickers:
                 if len(closes[t]) < self.min_bars:
-                    # Data not ready — park and retry next bar
-                    # (week not marked, so Friday can trigger).
                     return self.park_in_cash(allocation)
 
-            # Data confirmed — commit this week's rebalance.
             if week_key is not None:
                 self.last_rebalance_week = week_key
 
-            # ================================================
-            # CPI REGIME
-            # ================================================
+            cash = closes["BIL"]
+
+            # ------ CPI regime: >4% removes long duration ------
             median_cpi_data = data.get(("median_cpi",))
             latest_cpi = 0.0
             if median_cpi_data and len(median_cpi_data) > 0:
                 latest_cpi = median_cpi_data[-1].get("value", 0.0)
             inflation_on = latest_cpi > 4.0
 
-            # ================================================
-            # UNIVERSE SELECTION
-            # Inflation: exclude long duration (TLT)
-            # Normal: full FI + gold universe
-            # ================================================
             if inflation_on:
-                candidates = ["TIP", "SHY", "BIL", "HYG", "GLD"]
+                candidates = ["TIP", "SHY", "HYG", "LQD"]
                 safe_haven = "BIL"
             else:
-                candidates = ["TLT", "IEF", "LQD", "HYG", "GLD"]
+                candidates = ["TLT", "IEF", "LQD", "HYG", "TIP"]
                 safe_haven = "SHY"
 
-            # ================================================
-            # MOMENTUM RANKING
-            # ================================================
+            # ------ Dual momentum selection ------
+            # Rank by 3/6/12m composite; hold only those whose
+            # 6-month return BEATS CASH.
             scores = {
                 t: self.composite_momentum(closes[t]) for t in candidates
             }
             ranked = sorted(
                 scores.keys(), key=lambda t: scores[t], reverse=True
             )
-
-            # Absolute momentum gate: 3-month return must be positive
-            positive = [
-                t for t in ranked if self.momentum(closes[t], 63) > 0
+            eligible = [
+                t for t in ranked
+                if self.excess_momentum(closes[t], cash, 126) > 0
             ]
+            hold = eligible[: self.top_n]
 
-            # Trend gate: price above 50-day SMA
-            confirmed = [
-                t for t in positive
-                if self.is_above_sma(t, ohlcv, closes[t], 50)
-            ]
-
-            # ================================================
-            # DRAWDOWN BRAKE
-            # If ZERO candidates have positive 21-day momentum,
-            # everything is selling off. Full defense.
-            # ================================================
-            any_short_positive = any(
-                self.momentum(closes[t], 21) > 0 for t in candidates
+            # ------ Graded risk scaling (breadth) ------
+            # Gross exposure = fraction of candidates beating
+            # cash over 3 months. Broad selloff -> gross falls
+            # proportionally; no single-ticker binary flips.
+            beating = sum(
+                1 for t in candidates
+                if self.excess_momentum(closes[t], cash, 63) > 0
             )
-            if not any_short_positive:
-                confirmed = []
+            gross = beating / len(candidates)
 
-            # ================================================
-            # INVERSE-VOL WEIGHTING
-            # ================================================
-            def inv_vol_weights(assets):
+            # ------ Weights ------
+            if hold and gross > 0:
                 vols = {}
-                for t in assets:
+                for t in hold:
                     v = self.realized_vol(closes[t], 63)
                     vols[t] = v if (v and v > 0) else 0.10
-                inv = {t: 1.0 / vols[t] for t in assets}
-                total = sum(inv.values())
-                if total <= 0:
-                    eq = 1.0 / len(assets)
-                    return {t: eq for t in assets}
-                return {t: inv[t] / total for t in assets}
-
-            # ================================================
-            # ALLOCATION TIERS
-            # ================================================
-            if len(confirmed) >= 3:
-                hold = confirmed[:3]
-                weights = inv_vol_weights(hold)
-            elif len(confirmed) == 2:
-                hold = confirmed[:2]
-                w = inv_vol_weights(hold)
-                weights = {t: v * 0.80 for t, v in w.items()}
-                weights[safe_haven] = weights.get(safe_haven, 0) + 0.20
-            elif len(confirmed) == 1:
-                weights = {confirmed[0]: 0.40, safe_haven: 0.60}
+                inv = {t: 1.0 / vols[t] for t in hold}
+                inv_total = sum(inv.values())
+                weights = {
+                    t: (inv[t] / inv_total) * gross for t in hold
+                }
+                defensive = 1.0 - gross
             else:
-                if safe_haven == "BIL":
-                    weights = {"BIL": 1.0}
-                else:
-                    weights = {safe_haven: 0.60, "BIL": 0.40}
+                weights = {}
+                defensive = 1.0
 
-            # ================================================
-            # APPLY & NORMALIZE
-            # ================================================
+            # Defensive sleeve: split safe haven / cash
+            if defensive > 0:
+                if safe_haven == "BIL":
+                    weights["BIL"] = weights.get("BIL", 0) + defensive
+                else:
+                    weights[safe_haven] = (
+                        weights.get(safe_haven, 0) + defensive * 0.5
+                    )
+                    weights["BIL"] = (
+                        weights.get("BIL", 0) + defensive * 0.5
+                    )
+
+            # ------ Apply & normalize ------
             for t, w in weights.items():
                 if t in allocation:
                     allocation[t] = round(w, 4)
@@ -262,7 +237,10 @@ class TradingStrategy(Strategy):
                 for t, w in allocation.items()
                 if w > 0
             ]
-            log(f"Rebalance {date_str}: {held}")
+            log(
+                f"Rebalance {date_str} | CPI {latest_cpi:.1f} "
+                f"| gross {gross:.2f} | {held}"
+            )
             return TargetAllocation(allocation)
 
         except Exception as e:
