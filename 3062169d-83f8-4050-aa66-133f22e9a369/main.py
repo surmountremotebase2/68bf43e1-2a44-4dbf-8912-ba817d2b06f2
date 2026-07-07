@@ -26,14 +26,14 @@ class TradingStrategy(Strategy):
     required for correctness.
     """
 
-    CORE = {"SHY": 0.15, "IEF": 0.15, "LQD": 0.10}   # 40% always on
+    CORE = {"SHY": 0.15, "UUP": 0.15}   # 40% always on
     W_DURATION = 0.30
     W_CREDIT = 0.30
 
     def __init__(self):
         self.tickers = [
             "TLT", "IEF", "LQD", "TIP",
-            "HYG", "SHY", "BIL",
+            "HYG", "SHY", "BIL", "UUP",
             "SPY",  # benchmark only — never allocated
         ]
         self.data_list = [MedianCPI()]
