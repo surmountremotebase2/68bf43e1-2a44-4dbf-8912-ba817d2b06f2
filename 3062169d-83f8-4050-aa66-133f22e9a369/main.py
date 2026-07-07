@@ -223,4 +223,3 @@ class TradingStrategy(Strategy):
         except Exception as e:
             log(f"Error: {e}")
             return self.park_in_cash()
-</code>
