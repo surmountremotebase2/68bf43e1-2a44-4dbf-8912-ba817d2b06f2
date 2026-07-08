@@ -7,6 +7,8 @@ import math
 class TradingStrategy(Strategy):
 
     def __init__(self):
+        # We add XLU to fetch the data, but we won't allocate to it.
+        # This keeps the strategy purely Fixed Income & Gold focused.
         self.tickers = [
             "TLT",  # Long-term treasuries (20+ yr)
             "IEF",  # Intermediate treasuries (7-10 yr)
@@ -16,13 +18,15 @@ class TradingStrategy(Strategy):
             "SHY",  # Short-term treasuries (1-3 yr)
             "BIL",  # Ultra-short T-Bills (1-3 mo)
             "GLD",  # Gold (tail-risk hedge)
+            "XLU",  # Utilities Sector (Used for Ratio ONLY)
         ]
+        self.investable_assets = [t for t in self.tickers if t != "XLU"]
+        
         self.data_list = [MedianCPI()]
         self.min_bars = 150
         self.warmup = 1
         
-        # INCREASED LOOKBACK: Shift from weekly (5) to Monthly (21) 
-        # dramatically lowers trading frequency and eliminates noise whipsaws
+        # Monthly Rebalance (~21 trading days) to minimize turnover drag
         self.rebalance_freq = 21 
         self.bar_count = 0
         self.last_allocation = None
@@ -64,7 +68,6 @@ class TradingStrategy(Strategy):
         return (prices[-1] / prev) - 1.0
 
     def composite_momentum(self, prices):
-        # Re-weighted to favor intermediate/long-term trend persistence in Fixed Income
         m1 = self.momentum(prices, 21)
         m3 = self.momentum(prices, 63)
         m6 = self.momentum(prices, 126)
@@ -100,14 +103,14 @@ class TradingStrategy(Strategy):
     # ============================================================
 
     def run(self, data):
-        allocation = {t: 0.0 for t in self.tickers}
+        allocation = {t: 0.0 for t in self.investable_assets}
 
         try:
             ohlcv = data["ohlcv"]
             if len(ohlcv) < self.min_bars:
                 return TargetAllocation(allocation)
 
-            # Monthly Rebalance Sentinel
+            # Monthly Rebalance Gate
             self.bar_count += 1
             if self.bar_count % self.rebalance_freq != 0 and self.last_allocation is not None:
                 return TargetAllocation(self.last_allocation)
@@ -118,32 +121,47 @@ class TradingStrategy(Strategy):
                     return TargetAllocation(allocation)
 
             # ================================================
-            # DYNAMIC INFLATION REGIME SWITCHING
+            # XLU/TLT REGIME FILTER (The Core Engine)
             # ================================================
-            median_cpi_data = data.get(("median_cpi",))
-            inflation_on = False
+            # Align price arrays to handle any missing internal bars safely
+            min_len = min(len(closes["XLU"]), len(closes["TLT"]))
             
+            # Generate the Ratio array (XLU / TLT)
+            xlu_tlt_ratio = [
+                x / t for x, t in zip(
+                    closes["XLU"][-min_len:], 
+                    closes["TLT"][-min_len:]
+                )
+            ]
+            
+            # Use 63-day (3-month) momentum of the ratio to dictate the regime
+            ratio_momentum = self.momentum(xlu_tlt_ratio, 63)
+            risk_on_regime = ratio_momentum > 0
+
+            # Dynamic CPI check as a secondary override
+            inflation_accelerating = False
+            median_cpi_data = data.get(("median_cpi",))
             if median_cpi_data and len(median_cpi_data) >= 4:
                 latest_cpi = median_cpi_data[-1].get("value", 0.0)
-                # Compare against 3 months ago to discover directional velocity
-                three_month_ago_cpi = median_cpi_data[-4].get("value", 0.0)
-                
-                # Inflation is ON if it is structural (above 3.5%) AND accelerating
-                if latest_cpi > 3.5 and latest_cpi >= three_month_ago_cpi:
-                    inflation_on = True
-            elif median_cpi_data and len(median_cpi_data) > 0:
-                # Fallback safeguard
-                inflation_on = median_cpi_data[-1].get("value", 0.0) > 4.0
+                three_mo_cpi = median_cpi_data[-4].get("value", 0.0)
+                if latest_cpi > 3.5 and latest_cpi >= three_mo_cpi:
+                    inflation_accelerating = True
 
             # ================================================
-            # UNIVERSE SELECTION
+            # UNIVERSE SELECTION (Regime Dependent)
             # ================================================
-            if inflation_on:
+            if inflation_accelerating:
+                # Structural Inflation overrides everything
                 candidates = ["TIP", "SHY", "BIL", "HYG", "GLD"]
                 safe_haven = "BIL"
+            elif risk_on_regime:
+                # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
+                candidates = ["HYG", "LQD", "TIP", "SHY", "GLD"]
+                safe_haven = "SHY"
             else:
-                candidates = ["TLT", "IEF", "LQD", "HYG", "GLD"]
-                safe_haven = "IEF" # Upgraded to IEF for better yield generation when regime is safe
+                # Bonds outperforming Utilities: Rates falling, duration thrives
+                candidates = ["TLT", "IEF", "LQD", "GLD"]
+                safe_haven = "IEF"
 
             # ================================================
             # SYSTEMATIC TREND & MOMENTUM GATES
@@ -151,19 +169,15 @@ class TradingStrategy(Strategy):
             scores = {t: self.composite_momentum(closes[t]) for t in candidates}
             ranked = sorted(scores.keys(), key=lambda t: scores[t], reverse=True)
 
-            # Absolute Momentum Gate (Medium-term structural health)
             positive = [t for t in ranked if self.momentum(closes[t], 63) > 0]
-
-            # Dynamic Trend Gate: Smoothed to 100-day SMA to reduce noise whipsaws
             confirmed = [t for t in positive if self.is_above_sma(t, ohlcv, closes[t], 100)]
 
             # ================================================
-            # CORRELATED DRAWDOWN BRAKE (RE-CALIBRATED)
+            # CORRELATED DRAWDOWN BRAKE
             # ================================================
-            # Look at a broader 42-day window (2 months) to avoid cutting exposure on minor noise
             any_medium_positive = any(self.momentum(closes[t], 42) > 0 for t in candidates)
             if not any_medium_positive:
-                confirmed = []
+                confirmed = [] # Trigger full defense
 
             # ================================================
             # RISK-PARITY WEIGHTING METRIC
@@ -199,7 +213,7 @@ class TradingStrategy(Strategy):
                 if safe_haven == "BIL":
                     weights = {"BIL": 1.0}
                 else:
-                    weights = {"IEF": 0.50, "BIL": 0.50}
+                    weights = {safe_haven: 0.50, "BIL": 0.50}
 
             # ================================================
             # POST-PROCESSING & NORMALIZATION
@@ -216,7 +230,8 @@ class TradingStrategy(Strategy):
             self.last_allocation = dict(allocation)
             
             held = [(t, round(w, 3)) for t, w in allocation.items() if w > 0]
-            log(f"Holdings Update: {held}")
+            log(f"Regime Risk-On: {risk_on_regime} | Inflation Check: {inflation_accelerating}")
+            log(f"Holdings: {held}")
             return TargetAllocation(allocation)
 
         except Exception as e:
