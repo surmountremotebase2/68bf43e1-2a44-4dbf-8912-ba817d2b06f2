@@ -158,11 +158,11 @@ class TradingStrategy(Strategy):
                 safe_haven = "BIL"
             elif risk_on_regime:
                 # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
-                candidates = ["HYG", "LQD", "TIP", "AGG", "GLD"]
+                candidates = ["HYG", "LQD", "TIP", "AGG"]
                 safe_haven = "SHY"
             else:
                 # Bonds outperforming Utilities: Rates falling, duration thrives
-                candidates = ["TLT", "IEF", "LQD", "AGG"]
+                candidates = ["TLT", "IEF", "LQD", "AGG", "GLD"]
                 safe_haven = "IEF"
 
             # ================================================
