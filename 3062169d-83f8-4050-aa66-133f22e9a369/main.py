@@ -23,11 +23,11 @@ class TradingStrategy(Strategy):
         self.investable_assets = [t for t in self.tickers if t != "XLU"]
         
         self.data_list = [MedianCPI()]
-        self.min_bars = 150
+        self.min_bars = 100
         self.warmup = 1
         
         # Monthly Rebalance (~21 trading days) to minimize turnover drag
-        self.rebalance_freq = 21 
+        self.rebalance_freq = 5
         self.bar_count = 0
         self.last_allocation = None
 
