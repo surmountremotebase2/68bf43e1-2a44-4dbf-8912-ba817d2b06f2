@@ -68,9 +68,9 @@ class TradingStrategy(Strategy):
         return (prices[-1] / prev) - 1.0
 
     def composite_momentum(self, prices):
-        m1 = self.momentum(prices, 21)
-        m3 = self.momentum(prices, 63)
-        m6 = self.momentum(prices, 126)
+        m1 = self.momentum(prices, 63)
+        m3 = self.momentum(prices, 126)
+        m6 = self.momentum(prices, 252)
         return 0.20 * m1 + 0.40 * m3 + 0.40 * m6
 
     def realized_vol(self, prices, lookback=63):
