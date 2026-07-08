@@ -143,10 +143,10 @@ class TradingStrategy(Strategy):
             # Dynamic CPI check as a secondary override
             inflation_accelerating = False
             median_cpi_data = data.get(("median_cpi",))
-            if median_cpi_data and len(median_cpi_data) >= 4:
+            if median_cpi_data and len(median_cpi_data) >= 2.5:
                 latest_cpi = median_cpi_data[-1].get("value", 0.0)
                 three_mo_cpi = median_cpi_data[-4].get("value", 0.0)
-                if latest_cpi > 3.5 and latest_cpi >= three_mo_cpi:
+                if latest_cpi > 2.5 and latest_cpi >= three_mo_cpi:
                     inflation_accelerating = True
 
             # ================================================
