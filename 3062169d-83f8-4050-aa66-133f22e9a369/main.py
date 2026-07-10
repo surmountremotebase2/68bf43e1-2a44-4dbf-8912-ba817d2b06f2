@@ -11,8 +11,11 @@ class TradingStrategy(Strategy):
         # This keeps the strategy purely Fixed Income & Gold focused.
         self.tickers = [
             "TLT",  # Long-term treasuries (20+ yr)
-            "AGG",
-            "UUP",
+            "AGG",  # Agg US Bonds
+            "BND",  # Total Bond Mrkt
+            "MUB",  # Municipal Bonds
+            "VWOB", # Emerging Mrkt Govt Bonds
+            "UUP",  # US Dollar Index
             "IEF",  # Intermediate treasuries (7-10 yr)
             "LQD",  # Investment grade corporate
             "TIP",  # TIPS (inflation hedge)
@@ -158,11 +161,11 @@ class TradingStrategy(Strategy):
                 safe_haven = "BIL"
             elif risk_on_regime:
                 # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
-                candidates = ["HYG", "LQD", "AGG"]
+                candidates = ["HYG", "LQD", "AGG", "BND", "MUB", "VWOB"]
                 safe_haven = "SHY"
             else:
                 # Bonds outperforming Utilities: Rates falling, duration thrives
-                candidates = ["TLT", "IEF", "LQD", "AGG", "GLD"]
+                candidates = ["TLT", "LQD", "AGG", "GLD", "BND", "MUB", "VWOB"]
                 safe_haven = "IEF"
 
             # ================================================
