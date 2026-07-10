@@ -154,11 +154,11 @@ class TradingStrategy(Strategy):
             # ================================================
             if inflation_accelerating:
                 # Structural Inflation overrides everything
-                candidates = ["TIP", "SHY", "BIL", "UUP", "GLD"]
+                candidates = ["TIP", "SHY", "UUP", "GLD"]
                 safe_haven = "BIL"
             elif risk_on_regime:
                 # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
-                candidates = ["HYG", "LQD", "TIP", "AGG"]
+                candidates = ["HYG", "LQD", "AGG"]
                 safe_haven = "SHY"
             else:
                 # Bonds outperforming Utilities: Rates falling, duration thrives
