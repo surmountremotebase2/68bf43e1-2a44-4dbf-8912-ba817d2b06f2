@@ -70,13 +70,13 @@ class TradingStrategy(Strategy):
 
         # Rule 2: SPY/TLT Ratio
         if spy_tlt_ema3[-1] > spy_tlt_ema100[-1]:
-            qqq_weight += 0.33
+            gld_weight += 0.33
         else:
             tlt_weight += 0.33
 
         # Rule 3: GLD/TLT Ratio
         if gld_tlt_ema3[-1] > gld_tlt_ema100[-1]:
-            gld_weight += 0.33
+            qqq_weight += 0.33
         else:
             tlt_weight += 0.33
 
