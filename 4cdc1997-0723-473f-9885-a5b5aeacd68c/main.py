@@ -64,21 +64,21 @@ class TradingStrategy(Strategy):
         
         # Rule 1: SPY/GLD Ratio
         if spy_gld_ema3[-1] > spy_gld_ema100[-1]:
-            qqq_weight += 0.5
+            qqq_weight += 0.33
         else:
-            gld_weight += 0.5
+            gld_weight += 0.33
 
         # Rule 2: SPY/TLT Ratio
         if spy_tlt_ema3[-1] > spy_tlt_ema100[-1]:
-            qqq_weight += 0.5
+            qqq_weight += 0.33
         else:
-            tlt_weight += 0.5
+            tlt_weight += 0.33
 
         # Rule 3: GLD/TLT Ratio
         if gld_tlt_ema3[-1] > gld_tlt_ema100[-1]:
-            gld_weight += 0.5
+            gld_weight += 0.33
         else:
-            tlt_weight += 0.5
+            tlt_weight += 0.33
 
         # 4. Normalize the weights
         # The sum of weights above equals 1.5. To keep it between 0 and 1, we divide by the total.
