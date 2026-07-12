@@ -165,7 +165,7 @@ class TradingStrategy(Strategy):
                 safe_haven = "SHY"
             else:
                 # Bonds outperforming Utilities: Rates falling, duration thrives
-                candidates = ["TLT", "LQD", "AGG", "BND"]
+                candidates = ["TLT", "AGG", "BND"]
                 safe_haven = "IEF"
 
             # ================================================
