@@ -40,9 +40,11 @@ class TradingStrategy(Strategy):
         spy_gld_ratio = spy_close / gld_close
 
         # 2. Calculate the 20-month (420-day) EMA for the ratio
-        spy_gld_ema20m = ta.ema(spy_gld_ratio, length=lookback).tolist()
-        current_ratio = spy_gld_ratio.tolist()[-1]
-        current_ema = spy_gld_ema20m[-1]
+        spy_gld_ema50 = ta.ema(spy_gld_ratio, length=lookback).tolist()
+        spy_gld_ema3 = ta.ema(spy_gld_ratio, length=3).tolist()
+        #current_ratio = spy_gld_ratio.tolist()[-1]
+        current_ratio = spy_gld_ema3[-1]
+        current_ema = spy_gld_ema50[-1]
 
         # Initialize base weights
         spy_weight = 0.0
