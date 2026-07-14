@@ -57,7 +57,7 @@ class TradingStrategy(Strategy):
             gld_weight = 1.0
 
         # Log the current state for backtesting transparency
-        log(f"SPY/GLD Ratio: {current_ratio:.4f} | 20M EMA: {current_ema:.4f} -> Allocating SPY: {spy_weight}, GLD: {gld_weight}")
+        #log(f"SPY/GLD Ratio: {current_ratio:.4f} | 20M EMA: {current_ema:.4f} -> Allocating SPY: {spy_weight}, GLD: {gld_weight}")
 
         return TargetAllocation({
             "SPY": spy_weight,
