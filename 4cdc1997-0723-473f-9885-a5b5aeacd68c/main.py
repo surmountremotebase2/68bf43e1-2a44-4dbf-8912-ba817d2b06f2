@@ -26,7 +26,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         # 20 months is approximately 420 trading days (20 * ~21 days/month)
-        lookback = 120
+        lookback = 175
 
         # Ensure we have enough data to calculate a 420-period EMA
         if len(ohlcv) < lookback:
