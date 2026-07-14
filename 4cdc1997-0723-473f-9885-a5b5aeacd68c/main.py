@@ -26,7 +26,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         # 20 months is approximately 420 trading days (20 * ~21 days/month)
-        lookback = 50
+        lookback = 55
 
         # Ensure we have enough data to calculate a 420-period EMA
         if len(ohlcv) < lookback:
@@ -41,7 +41,7 @@ class TradingStrategy(Strategy):
 
         # 2. Calculate the 20-month (420-day) EMA for the ratio
         spy_gld_ema50 = ta.sma(spy_gld_ratio, length=lookback).tolist()
-        spy_gld_ema3 = ta.ema(spy_gld_ratio, length=2).tolist()
+        spy_gld_ema3 = ta.ema(spy_gld_ratio, length=3).tolist()
         #current_ratio = spy_gld_ratio.tolist()[-1]
         current_ratio = spy_gld_ema3[-1]
         current_ema = spy_gld_ema50[-1]
