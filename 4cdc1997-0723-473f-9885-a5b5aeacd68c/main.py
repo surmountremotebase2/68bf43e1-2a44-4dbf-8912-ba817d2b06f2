@@ -6,7 +6,7 @@ import pandas_ta as ta
 class TradingStrategy(Strategy):
     def __init__(self):
         # We only need SPY and GLD for this rotation strategy
-        self.tickers = ["SPY", "GLD"]
+        self.tickers = ["SPY", "GLD", "QQQ"]
         self.data_list = []
 
     @property
@@ -33,7 +33,7 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         # Extract closing prices
-        spy_close = pd.Series([x["SPY"]["close"] for x in ohlcv])
+        spy_close = pd.Series([x["QQQ"]["close"] for x in ohlcv])
         gld_close = pd.Series([x["GLD"]["close"] for x in ohlcv])
 
         # 1. Calculate the SPY/GLD ratio
@@ -62,6 +62,6 @@ class TradingStrategy(Strategy):
         #log(f"SPY/GLD Ratio: {current_ratio:.4f} | 20M EMA: {current_ema:.4f} -> Allocating SPY: {spy_weight}, GLD: {gld_weight}")
 
         return TargetAllocation({
-            "SPY": spy_weight,
+            "QQQ": spy_weight,
             "GLD": gld_weight
         })
