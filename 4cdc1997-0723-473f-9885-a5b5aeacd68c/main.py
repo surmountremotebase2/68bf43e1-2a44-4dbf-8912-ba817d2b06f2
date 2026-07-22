@@ -6,7 +6,7 @@ import pandas_ta as ta
 class TradingStrategy(Strategy):
     def __init__(self):
         # We only need SPY and GLD for this rotation strategy
-        self.tickers = ["SPY", "GLD", "QQQ"]
+        self.tickers = ["SPY", "GLD"]
         self.data_list = []
 
     @property
@@ -62,6 +62,6 @@ class TradingStrategy(Strategy):
         #log(f"SPY/GLD Ratio: {current_ratio:.4f} | 20M EMA: {current_ema:.4f} -> Allocating SPY: {spy_weight}, GLD: {gld_weight}")
 
         return TargetAllocation({
-            "QQQ": spy_weight,
+            "SPY": spy_weight,
             "GLD": gld_weight
         })
