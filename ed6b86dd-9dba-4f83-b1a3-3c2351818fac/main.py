@@ -12,7 +12,7 @@ class TradingStrategy(Strategy):
             "SSO", "GPIX", "ROBO", "BLOK",
             "DGT", "QTUM", "IDVO",
             "SETM", "LQDW", "CSHI", 
-            "VFLO", "FMTM", "EYLD",
+            "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
             "SFLO", "VFMO"
         ]
@@ -21,7 +21,7 @@ class TradingStrategy(Strategy):
             "SSO", "GPIX", "BCX", "ROBO", "BLOK",
             "DGT", "QTUM", "IDVO", "IDMO",
             "SETM", "NLR", "LQDW", "CSHI",
-            "VFLO", "FMTM", "EYLD",
+            "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
             "SFLO", "VFMO"
         ]
