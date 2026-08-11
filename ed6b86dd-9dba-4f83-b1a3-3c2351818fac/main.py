@@ -9,24 +9,24 @@ class TradingStrategy(Strategy):
     def __init__(self):
 
         self._assets = [
-            "SSO", "GPIX", "ROBO", "BLOK",
-            "DGT", "QTUM", "IDVO",
-            "SETM", "LQDW", "CSHI", 
+            "SSO", "GPIX", "BCX", "ROBO", "BLOK",
+            "DGT", "QTUM", "IDVO", "IDMO",
+            "SETM", "NLR", "LQDW",
             "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
-            "SFLO", "VFMO"
+            "SFLO", "VFMO", "CSHI"
         ]
 
         self.risk_assets = [
             "SSO", "GPIX", "BCX", "ROBO", "BLOK",
             "DGT", "QTUM", "IDVO", "IDMO",
-            "SETM", "NLR", "LQDW", "CSHI",
+            "SETM", "NLR", "LQDW",
             "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
             "SFLO", "VFMO"
         ]
 
-        self.safe_asset = "BIL"
+        self.safe_asset = "CSHI"
 
         self.last_alloc = {a: 0.0 for a in self._assets}
         self.last_alloc[self.safe_asset] = 1.0
