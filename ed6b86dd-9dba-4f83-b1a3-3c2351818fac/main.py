@@ -9,12 +9,13 @@ class TradingStrategy(Strategy):
     def __init__(self):
 
         self._assets = [
-            "SSO", "GPIX", "ROBO", "BLOK",
-            "DGT", "QTUM", "IDVO",
-            "SETM", "LQDW",
+            "SSO", "GPIX", "BCX", "ROBO", "BLOK",
+            "DGT", "QTUM", "IDVO", "IDMO",
+            "SETM", "NLR", "LQDW",
             "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
-            "SFLO", "VFMO", "CSHI"
+            "SFLO", "VFMO", "HGER", "IAU", 
+            "CSHI"
         ]
 
         self.risk_assets = [
@@ -23,7 +24,7 @@ class TradingStrategy(Strategy):
             "SETM", "LQDW",
             "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
-            "SFLO", "VFMO"
+            "SFLO", "VFMO", "HGER", "IAU"
         ]
 
         self.safe_asset = "CSHI"
