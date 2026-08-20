@@ -19,9 +19,9 @@ class TradingStrategy(Strategy):
         ]
 
         self.risk_assets = [
-            "SSO", "GPIX", "ROBO", "BLOK",
-            "DGT", "QTUM", "IDVO",
-            "SETM", "LQDW",
+            "SSO", "GPIX", "BCX", "ROBO", "BLOK",
+            "DGT", "QTUM", "IDVO", "IDMO",
+            "SETM", "NLR", "LQDW",
             "VFLO", "SPMO", "EYLD",
             "NDIV", "FRNW", "ACES",
             "SFLO", "VFMO", "HGER", "IAU"
