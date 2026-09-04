@@ -163,7 +163,7 @@ class TradingStrategy(Strategy):
                 candidates = ["TIP", "UUP", "GLD"]
                 safe_haven = "BIL"
             elif inflation_spike:
-                candidates = ["UUP"]
+                candidates = ["UUP", "GLD"]
                 safe_haven = "BIL"
             elif risk_on_regime:
                 # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
@@ -172,7 +172,7 @@ class TradingStrategy(Strategy):
             else:
                 # Bonds outperforming Utilities: Rates falling, duration thrives
                 candidates = ["TLT", "AGG", "BND"]
-                safe_haven = "IEF"
+                safe_haven = "BIL"
 
             # ================================================
             # SYSTEMATIC TREND & MOMENTUM GATES
