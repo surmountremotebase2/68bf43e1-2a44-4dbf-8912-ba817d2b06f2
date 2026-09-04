@@ -145,24 +145,30 @@ class TradingStrategy(Strategy):
 
             # Dynamic CPI check as a secondary override
             inflation_accelerating = False
+            inflation_spike = False
             median_cpi_data = data.get(("median_cpi",))
             if median_cpi_data and len(median_cpi_data) >= 2.5:
                 latest_cpi = median_cpi_data[-1].get("value", 0.0)
                 three_mo_cpi = median_cpi_data[-4].get("value", 0.0)
                 if latest_cpi > 2.5 and latest_cpi >= three_mo_cpi:
                     inflation_accelerating = True
+                elif latest_cpi > 2.5:
+                    inflation_spike = True
 
             # ================================================
             # UNIVERSE SELECTION (Regime Dependent)
             # ================================================
             if inflation_accelerating:
                 # Structural Inflation overrides everything
-                candidates = ["TIP", "SHY", "UUP", "GLD"]
+                candidates = ["TIP", "UUP", "GLD"]
+                safe_haven = "BIL"
+            elif inflation_spike:
+                candidates = ["UUP", "GLD"]
                 safe_haven = "BIL"
             elif risk_on_regime:
                 # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
                 candidates = ["HYG", "LQD", "AGG", "BND"]
-                safe_haven = "SHY"
+                safe_haven = "BIL"
             else:
                 # Bonds outperforming Utilities: Rates falling, duration thrives
                 candidates = ["TLT", "AGG", "BND"]
