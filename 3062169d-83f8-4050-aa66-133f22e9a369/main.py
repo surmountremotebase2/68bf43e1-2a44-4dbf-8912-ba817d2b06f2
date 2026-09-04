@@ -152,7 +152,7 @@ class TradingStrategy(Strategy):
                 three_mo_cpi = median_cpi_data[-4].get("value", 0.0)
                 if latest_cpi > 2.5 and latest_cpi >= three_mo_cpi:
                     inflation_accelerating = True
-                elif latest_cpi > 2.5:
+                elif latest_cpi > 3:
                     inflation_spike = True
 
             # ================================================
@@ -163,7 +163,7 @@ class TradingStrategy(Strategy):
                 candidates = ["TIP", "UUP", "GLD"]
                 safe_haven = "BIL"
             elif inflation_spike:
-                candidates = ["UUP", "GLD"]
+                candidates = ["UUP"]
                 safe_haven = "BIL"
             elif risk_on_regime:
                 # Utilities outperforming Bonds: Rates likely stable/rising, credit thrives
