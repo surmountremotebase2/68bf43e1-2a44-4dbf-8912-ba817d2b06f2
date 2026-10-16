@@ -60,21 +60,21 @@ class TradingStrategy(Strategy):
 
         # Scoring
         self.sma_days = 220
-        self.vol_window = 21
+        self.vol_window = 42
         self.vol_lookback = 126
-        self.w_vol = 0.5
-        self.w_dist = 0.5
+        self.w_vol = 0.7
+        self.w_dist = 0.7
         self.use_vol_score = True
         self.use_dist_score = True
 
         # Volatility targeting
         self.use_vol_target = True
         self.vt_lookback = 126
-        self.vt_target = 0.15
+        self.vt_target = 0.10
 
         # Selection
-        self.n_eq = 5
-        self.n_bd = 4
+        self.n_eq = 2
+        self.n_bd = 1
         self.max_sleeve_weight = 0.40
 
         # History needed: SMA(220) needs 221 closes; the 126-day windows need fewer
