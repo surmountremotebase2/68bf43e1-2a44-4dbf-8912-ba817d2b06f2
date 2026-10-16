@@ -56,14 +56,14 @@ class TradingStrategy(Strategy):
         self.e_floor = 0.5
         self.e_ceil = 0.65
         self.cash_min = 0.02
-        self.max_weight = 0.25
+        self.max_weight = 0.3
 
         # Scoring
         self.sma_days = 220
-        self.vol_window = 42
+        self.vol_window = 21
         self.vol_lookback = 126
-        self.w_vol = 0.7
-        self.w_dist = 0.7
+        self.w_vol = 0.5
+        self.w_dist = 0.5
         self.use_vol_score = True
         self.use_dist_score = True
 
@@ -73,7 +73,7 @@ class TradingStrategy(Strategy):
         self.vt_target = 0.10
 
         # Selection
-        self.n_eq = 2
+        self.n_eq = 3
         self.n_bd = 1
         self.max_sleeve_weight = 0.40
 
