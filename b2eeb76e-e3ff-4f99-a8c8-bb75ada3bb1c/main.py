@@ -75,7 +75,7 @@ class TradingStrategy(Strategy):
         # Selection
         self.n_eq = 3
         self.n_bd = 1
-        self.max_sleeve_weight = 0.40
+        self.max_sleeve_weight = 0.50
 
         # History needed: SMA(220) needs 221 closes; the 126-day windows need fewer
         self.bars = 221
