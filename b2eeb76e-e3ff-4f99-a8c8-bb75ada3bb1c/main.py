@@ -21,7 +21,7 @@ class TradingStrategy(Strategy):
       Dist score = distance of close from SMA(220), in units of its random-walk standard deviation, scaled to +/-10
       Score      = 0.5 * Vol score + 0.5 * Dist score
 
-    Allocation at each rebalance (first bar of a month, or equity share leaves the band, or nothing held yet):
+    Allocation at each rebalance (first bar of a calendar quarter, or equity share leaves the band, or nothing held yet):
       1. Equity sleeve: top 5 by score, weights proportional to (score + 10), floor of 1, max 40% of the sleeve
          (and 25% of the portfolio).
       2. Volatility target: 126-day realised vol of the selected equity basket vs 15%.
@@ -34,6 +34,8 @@ class TradingStrategy(Strategy):
     Surmount specifics:
       - Stateless: every decision uses only data["ohlcv"] (history up to the current bar) and data["holdings"].
       - Between rebalances the strategy returns the current holdings, so no trades are generated.
+      - Quarterly cadence (rebalance_months = 3): tested against daily, weekly and monthly. Daily and weekly were worse
+        after costs; quarterly matched or beat monthly with about half the turnover. The equity-band trigger stays on.
       - Hard limits are checked before every rebalance and the strategy fails closed (keeps current holdings):
         weights sum to at most 1 | no negative weights | single ETF (cash excluded) <= 25%
         | equity share inside [50%, 65%].
@@ -46,7 +48,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "XLV", "XLP", "XLU", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "SHY", "BND", "IEF", "TIP"]
+        self.bonds = ["AGG", "SHY", "IEF", "TLT", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"
         self.trading = self.equity + self.bonds + [self.cash]
@@ -56,7 +58,7 @@ class TradingStrategy(Strategy):
         self.e_floor = 0.5
         self.e_ceil = 0.65
         self.cash_min = 0.02
-        self.max_weight = 0.3
+        self.max_weight = 0.25
 
         # Scoring
         self.sma_days = 220
@@ -70,12 +72,15 @@ class TradingStrategy(Strategy):
         # Volatility targeting
         self.use_vol_target = True
         self.vt_lookback = 126
-        self.vt_target = 0.10
+        self.vt_target = 0.15
 
         # Selection
-        self.n_eq = 3
-        self.n_bd = 1
-        self.max_sleeve_weight = 0.50
+        self.n_eq = 5
+        self.n_bd = 4
+        self.max_sleeve_weight = 0.40
+
+        # Rebalance schedule: every 3 months (calendar quarters). Set to 1 for monthly.
+        self.rebalance_months = 3
 
         # History needed: SMA(220) needs 221 closes; the 126-day windows need fewer
         self.bars = 221
@@ -99,6 +104,14 @@ class TradingStrategy(Strategy):
         for v in bar.values():
             return str(v["date"])
         return ""
+
+    def _period(self, bar):
+        """Rebalance period of a bar: calendar months grouped by `rebalance_months` (3 = calendar quarters)."""
+        stamp = self._stamp(bar)
+        try:
+            return (int(stamp[:4]) * 12 + int(stamp[5:7]) - 1) // self.rebalance_months
+        except ValueError:
+            return -1
 
     def _frame(self, rows):
         """Close prices of the whole universe over the fetched window. Missing tickers become NaN."""
@@ -225,10 +238,10 @@ class TradingStrategy(Strategy):
         equity_now = sum(cur[a] for a in self.equity)
 
         # Rebalance triggers
-        new_month = self._stamp(ohlcv[-1])[:7] != self._stamp(ohlcv[-2])[:7]
+        new_period = self._period(ohlcv[-1]) != self._period(ohlcv[-2])
         if invested < 0.5:
             reason = "initial"
-        elif new_month:
+        elif new_period:
             reason = "scheduled"
         elif equity_now < self.e_floor - 1e-9 or equity_now > self.e_ceil + 1e-9:
             reason = "band"
@@ -258,3 +271,6 @@ class TradingStrategy(Strategy):
             self._stamp(ohlcv[-1])[:10], reason, info["equity_target"], info["vol_scale"], info["equity_vol"],
             ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
+
+
+        
