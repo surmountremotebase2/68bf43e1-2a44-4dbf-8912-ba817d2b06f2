@@ -13,6 +13,7 @@ class TradingStrategy(Strategy):
       # self.data_list = [InstitutionalOwnership(i) for i in self.tickers]
       #self.data_list = [InsiderTrading(i) for i in self.tickers]
       self.mrkt = "QQQ"
+      self.bench = "SPY"
       self.count = 5
 
 
@@ -22,7 +23,7 @@ class TradingStrategy(Strategy):
 
    @property
    def assets(self):
-      return self.tickers + [self.mrkt]
+      return self.tickers + [self.mrkt] + [self.bench]
 
 
    def realized_volatility_daily(self, series_log_return):
