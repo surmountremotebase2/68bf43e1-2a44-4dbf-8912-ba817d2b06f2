@@ -55,17 +55,17 @@ class TradingStrategy(Strategy):
 
         # Risk profile band
         self.e_anchor = 0.4
-        self.e_floor = 0.3
-        self.e_ceil = 0.45
+        self.e_floor = 0.25
+        self.e_ceil = 0.5
         self.cash_min = 0.02
-        self.max_weight = 0.25
+        self.max_weight = 0.4
 
         # Scoring
         self.sma_days = 220
-        self.vol_window = 21
+        self.vol_window = 15
         self.vol_lookback = 126
-        self.w_vol = 0.5
-        self.w_dist = 0.5
+        self.w_vol = 0.7
+        self.w_dist = 0.3
         self.use_vol_score = True
         self.use_dist_score = True
 
@@ -229,7 +229,7 @@ class TradingStrategy(Strategy):
     # ---------- strategy ----------
     def run(self, data):
         ohlcv = data["ohlcv"]
-        if len(ohlcv) < self.bars:
+        if len(ohlcv) < 0:
             return TargetAllocation({})  # not enough history: stay in cash
 
         holdings = data.get("holdings") or {}
