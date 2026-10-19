@@ -248,7 +248,7 @@ class TradingStrategy(Strategy):
     # ---------- strategy ----------
     def run(self, data):
         ohlcv = data["ohlcv"]
-        if len(ohlcv) < self.min_bars:
+        if len(ohlcv) < 1:
             return TargetAllocation({})  # not enough history: stay in cash
 
         holdings = data.get("holdings") or {}
