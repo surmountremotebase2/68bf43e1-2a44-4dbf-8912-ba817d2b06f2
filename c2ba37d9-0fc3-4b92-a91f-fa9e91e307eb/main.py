@@ -7,46 +7,53 @@ import math
 
 class TradingStrategy(Strategy):
     """
-    Conservative: score-driven ETF allocation inside a fixed equity band. Long only, no leverage, daily bars.
+    Conservative: monthly Dual Momentum (12-1) with a trend gate, inside a fixed equity band.
+    Long only, no leverage, daily bars, rebalance on the first bar of each month.
 
     Risk profile: anchor 40% equity, band 30% to 45% (references: Vanguard LifeStrategy Conservative Growth (40/60) and
     American Century "Conservative" sample portfolio at 45% equity). The rest is bonds and short-term (BIL >= 2%).
 
-    Universe (14 scored ETFs + cash):
-      Equity: VTI VIG XLV XLP XLU EFA VWO VNQ     Bonds: AGG SHY IEF TLT TIP LQD     Cash: BIL
-      SPY is listed in `assets` for benchmarking only and always receives a 0% target.
+    Universe: Equity VTI VIG XLV XLP XLU EFA VWO VNQ | Bonds AGG SHY IEF TLT TIP LQD | Cash BIL
+    (SPY is listed in `assets` for benchmarking only and always receives a 0% target.)
 
-    Score per ETF, from data up to the current bar only (range -10 to +10):
-      Vol score  = inverse decile of the 21-day realised vol versus its prior 126 observations (low vol = high score)
-      Dist score = distance of close from SMA(220), in units of its random-walk standard deviation, scaled to +/-10
-      Score      = 0.5 * Vol score + 0.5 * Dist score
+    Signals, from data up to the current bar only:
+      Momentum 12-1  = close 21 bars ago / close 252 bars ago - 1 (skips the latest month).
+      Relative       = rank by momentum inside each sleeve (equity: top 4 of 8, bonds: top 4 of 6).
+      Absolute       = momentum must beat the cash hurdle (BIL 12-1 return; 0 until BIL has a year of history).
+      Trend gate     = one of (default "vote"):
+        "sma"     close > SMA(200)
+        "avwap"   close > anchored VWAP of the calendar quarter. In the first 21 bars of a quarter the anchor is the
+                  start of the previous quarter, so the window is never degenerate.
+        "kalman"  filtered slope > 0 of a local-linear-trend Kalman filter on the log month-end closes of the last
+                  60 completed months (needs 24 months; fewer months = gate fails). The filtered value is causal.
+        "vote"    at least 2 of the 3 above (least sensitive to any one filter)
+        "none"    absolute momentum only
+      An ETF "passes" when it beats the cash hurdle AND the gate is true.
 
-    Allocation at each rebalance (first bar of a calendar quarter, or equity share leaves the band, or nothing held yet):
-      1. Equity sleeve: top 5 by score, weights proportional to (score + 10), floor of 1, max 40% of the sleeve
-         (and 25% of the portfolio).
-      2. Volatility target: 126-day realised vol of the selected equity basket vs 15%.
-         Equity budget = anchor * min(1, 15% / vol), never below the band floor and never above the anchor.
-      3. Bond sleeve (budget = 1 - equity - cash minimum): top 4 by score, only those with score > 0,
-         weights proportional to score, same caps. Any unallocated share goes to BIL.
-      4. BIL receives the 2% minimum plus any unallocated bond budget.
-    Ties in score go to the earlier ticker in the universe list (deterministic).
+    Allocation (all weights are slots of 1/4):
+      Equity slot  = (floor + (anchor - floor) * pass) / 4 : a passing slot gets its full weight, a failing slot
+                     drops to its band-floor weight, so equity always stays inside [30%, 40%].
+      Bond slot    = bond budget / 4 if it passes, else 0 (the share goes to BIL). Bond budget = 1 - equity - 2%.
+      BIL          = 2% minimum plus every unallocated share.
 
     Surmount specifics:
-      - Stateless: every decision uses only data["ohlcv"] (history up to the current bar) and data["holdings"].
-      - Between rebalances the strategy returns the current holdings, so no trades are generated.
-      - Quarterly cadence (rebalance_months = 3): tested against daily, weekly and monthly. Daily and weekly were worse
-        after costs; quarterly matched or beat monthly with about half the turnover. The equity-band trigger stays on.
+      - Stateless: decisions use only data["ohlcv"] (history to the current bar) and data["holdings"].
+      - Between rebalances the strategy returns current holdings (no trades). A rebalance also happens if the
+        equity share of the holdings leaves the band [30%, 45%] or if nothing is held yet.
       - Hard limits are checked before every rebalance and the strategy fails closed (keeps current holdings):
         weights sum to at most 1 | no negative weights | single ETF (cash excluded) <= 25%
-        | equity share inside [30%, 45%].
-      - Audit trail: one log() line per rebalance (date, reason, equity budget, volatility scale, equity vol, weights)
-        and one line for every refused rebalance.
-      - Not enough history, a missing price, or missing holdings never raises: the strategy holds what it has
-        (or stays in cash if nothing is held yet). Waiting for history is silent; a refused rebalance on a held portfolio is logged.
+        | equity share inside [30%, 40%].
+      - Audit trail: one log() line per rebalance (date, reason, equity budget, passes, weights) and one line per
+        refused or skipped rebalance on a held portfolio.
+      - Missing data, too little history or missing holdings never raise.
+
+    Reading backtests of this file: the first bar of the month is one of many possible rebalance days. Moving the
+    rebalance day changes Sharpe by about 0.07 to 0.10 and CAGR by about 0.5 to 0.6 points, and the first bar is at the
+    top of that range. Quote averages and ranges over rebalance days, not a single run. The choice of gate moves
+    results by less than that noise.
     """
 
     def __init__(self):
-        # Universe
         self.equity = ["VTI", "VIG", "XLV", "XLP", "XLU", "EFA", "VWO", "VNQ"]
         self.bonds = ["AGG", "SHY", "IEF", "TLT", "TIP", "LQD"]
         self.cash = "BIL"
@@ -55,35 +62,31 @@ class TradingStrategy(Strategy):
 
         # Risk profile band
         self.e_anchor = 0.4
-        self.e_floor = 0.25
-        self.e_ceil = 0.5
+        self.e_floor = 0.3
+        self.e_ceil = 0.45
         self.cash_min = 0.02
-        self.max_weight = 0.4
+        self.max_weight = 0.25
 
-        # Scoring
-        self.sma_days = 220
-        self.vol_window = 15
-        self.vol_lookback = 126
-        self.w_vol = 0.7
-        self.w_dist = 0.3
-        self.use_vol_score = True
-        self.use_dist_score = True
-
-        # Volatility targeting
-        self.use_vol_target = True
-        self.vt_lookback = 126
-        self.vt_target = 0.15
+        # Signals
+        self.gate = "vote"            # "none" | "sma" | "avwap" | "kalman" | "vote"
+        self.use_abs = True
+        self.skip = 21                # 12-1: skip the latest month
+        self.lookback = 252
+        self.sma_days = 200
+        self.avwap_min_bars = 21
+        self.kal_months = 60
+        self.kal_min_months = 24
+        self.kal_q_level = 0.1
+        self.kal_q_slope = 0.01
+        self.kal_r = 1.0
 
         # Selection
-        self.n_eq = 5
+        self.n_eq = 4
         self.n_bd = 4
-        self.max_sleeve_weight = 0.40
 
-        # Rebalance schedule: every 3 months (calendar quarters). Set to 1 for monthly.
-        self.rebalance_months = 3
-
-        # History needed: SMA(220) needs 221 closes; the 126-day windows need fewer
-        self.bars = 221
+        # History to request: 60 months of month ends for the Kalman filter
+        self.min_bars = 253
+        self.bars = 1400
 
     @property
     def assets(self):
@@ -95,128 +98,144 @@ class TradingStrategy(Strategy):
 
     @property
     def data(self):
-        return []  # price data only
+        return []  # price and volume data only
 
     # ---------- helpers ----------
     @staticmethod
     def _stamp(bar):
-        """Date string of a bar (every ticker in a bar carries the same date)."""
         for v in bar.values():
             return str(v["date"])
         return ""
 
-    def _period(self, bar):
-        """Rebalance period of a bar: calendar months grouped by `rebalance_months` (3 = calendar quarters)."""
-        stamp = self._stamp(bar)
-        try:
-            return (int(stamp[:4]) * 12 + int(stamp[5:7]) - 1) // self.rebalance_months
-        except ValueError:
-            return -1
-
-    def _frame(self, rows):
+    def _closes(self, rows):
         """Close prices of the whole universe over the fetched window. Missing tickers become NaN."""
         return pd.DataFrame({t: [bar[t]["close"] if t in bar else float("nan") for bar in rows]
                              for t in self.trading})
 
-    @staticmethod
-    def _top(score, universe, n):
-        """Top n by score. Ties go to the earlier ticker in the universe list, so the choice is deterministic."""
-        return sorted(universe, key=lambda c: (-score[c], universe.index(c)))[:n]
+    def _momentum(self, df):
+        """12-1 momentum per ETF: close[-1-skip] / close[-1-lookback] - 1 (NaN if either is missing)."""
+        if len(df) < self.lookback + 1:
+            return {}
+        a = df.iloc[-1 - self.skip]
+        b = df.iloc[-1 - self.lookback]
+        return {c: (a[c] / b[c] - 1.0) for c in self.trading if not pd.isna(a[c]) and not pd.isna(b[c]) and b[c] > 0}
 
-    @staticmethod
-    def _cap_normalize(tilt, cap):
-        """Proportional weights with a cap. If the cap cannot be met the leftover stays unallocated."""
-        tot = sum(tilt.values())
-        w = {k: v / tot for k, v in tilt.items()}
-        for _ in range(10):
-            over = [k for k in w if w[k] > cap + 1e-12]
-            if not over:
-                break
-            excess = sum(w[k] - cap for k in over)
-            for k in over:
-                w[k] = cap
-            under = [k for k in w if k not in over and 0 < w[k] < cap - 1e-12]
-            if not under:
-                break
-            s = sum(w[k] for k in under)
-            for k in under:
-                w[k] += excess * w[k] / s
-        return w
+    def _gate_sma(self, ticker, rows):
+        sma = SMA(ticker, rows[-self.sma_days:], self.sma_days)
+        return bool(sma and not pd.isna(sma[-1]) and rows[-1][ticker]["close"] > sma[-1])
 
-    def _vol_score(self, rv):
-        """Inverse realised-vol decile score (+10 lowest vol ... -10 highest) against the prior distribution."""
-        cur = rv.iloc[-1]
-        win = rv.iloc[-1 - self.vol_lookback:-1].dropna()
-        if len(win) < 20 or pd.isna(cur):
-            return float("nan")
-        deciles = win.quantile([i / 10.0 for i in range(1, 10)])
-        rank = int((cur > deciles).sum())
-        return 10.0 - rank * (20.0 / 9.0)
+    def _gate_avwap(self, ticker, rows):
+        """Close above the anchored VWAP of the calendar quarter (previous quarter anchor in the first 21 bars)."""
+        def qkey(bar):
+            s = self._stamp(bar)
+            return s[:4] + "Q" + str((int(s[5:7]) - 1) // 3 + 1)
+        cur_key = qkey(rows[-1])
+        cur_idx = [i for i in range(len(rows) - 1, -1, -1) if qkey(rows[i]) == cur_key]
+        first_cur = cur_idx[-1]
+        elapsed = len(cur_idx) - 1                      # bars of this quarter before the current bar
+        start = first_cur
+        if elapsed < self.avwap_min_bars:               # use the previous quarter start as anchor
+            prev_key = qkey(rows[first_cur - 1]) if first_cur > 0 else None
+            if prev_key is None:
+                return False
+            j = first_cur - 1
+            while j >= 0 and qkey(rows[j]) == prev_key:
+                j -= 1
+            start = j + 1
+        pv = vv = 0.0
+        for bar in rows[start:]:
+            if ticker not in bar:
+                return False
+            b = bar[ticker]
+            vol = b.get("volume") or 0.0
+            pv += (b["high"] + b["low"] + b["close"]) / 3.0 * vol
+            vv += vol
+        return bool(vv > 0 and rows[-1][ticker]["close"] > pv / vv)
 
-    def _dist_score(self, ticker, close, sig_d, rows):
-        """Distance from SMA in units of its random-walk standard deviation, clipped to +/-2, scaled to +/-10."""
-        sma_list = SMA(ticker, rows, self.sma_days)
-        if not sma_list or pd.isna(sma_list[-1]) or not sig_d or pd.isna(sig_d):
-            return float("nan")
-        z = (close / sma_list[-1] - 1.0) / (sig_d * math.sqrt(self.sma_days / 3.0))
-        return max(-2.0, min(2.0, z)) * 5.0
+    def _gate_kalman(self, ticker, rows):
+        """Filtered slope of a local-linear-trend Kalman filter on log month-end closes (completed months only)."""
+        last = {}
+        order = []
+        for bar in rows:
+            if ticker in bar:
+                m = self._stamp(bar)[:7]
+                if m not in last:
+                    order.append(m)
+                last[m] = bar[ticker]["close"]
+        cur = self._stamp(rows[-1])[:7]
+        months = [m for m in order if m != cur][-self.kal_months:]
+        y = [math.log(last[m]) for m in months]
+        if len(y) < self.kal_min_months:
+            return False
+        d = [y[i] - y[i - 1] for i in range(1, len(y))]
+        mean = sum(d) / len(d)
+        sd = math.sqrt(sum((v - mean) ** 2 for v in d) / (len(d) - 1))
+        if not sd > 0:
+            return False
+        z = [(v - y[0]) / sd for v in y]
+        l, s = z[0], 0.0
+        p00, p01, p10, p11 = 1.0, 0.0, 0.0, 0.1
+        for k in range(1, len(z)):
+            l, s = l + s, s                              # predict
+            p00, p01, p10, p11 = (p00 + p01 + p10 + p11 + self.kal_q_level, p01 + p11,
+                                  p10 + p11, p11 + self.kal_q_slope)
+            S = p00 + self.kal_r                         # update
+            k0, k1 = p00 / S, p10 / S
+            innov = z[k] - l
+            l, s = l + k0 * innov, s + k1 * innov
+            p00, p01, p10, p11 = p00 - k0 * p00, p01 - k0 * p01, p10 - k1 * p00, p11 - k1 * p01
+        return s > 0
+
+    def _gate_ok(self, ticker, rows):
+        g = self.gate
+        if g == "none":
+            return True
+        if g == "sma":
+            return self._gate_sma(ticker, rows)
+        if g == "avwap":
+            return self._gate_avwap(ticker, rows)
+        if g == "kalman":
+            return self._gate_kalman(ticker, rows)
+        votes = (int(self._gate_sma(ticker, rows)) + int(self._gate_avwap(ticker, rows))
+                 + int(self._gate_kalman(ticker, rows)))
+        return votes >= 2
+
+    def _sleeve(self, universe, n, mom, hurdle, rows):
+        valid = [c for c in universe if c in mom]
+        if len(valid) < n:
+            return None
+        top = sorted(valid, key=lambda c: (-mom[c], universe.index(c)))[:n]
+        res = {}
+        for c in top:
+            ok = (mom[c] > hurdle) if self.use_abs else True
+            res[c] = bool(ok and self._gate_ok(c, rows))
+        return res
 
     def _target(self, df, rows):
         """Target weights from data up to the current bar. Returns (weights dict or None, info dict)."""
-        rets = df.pct_change()
-        rv = rets.rolling(self.vol_window).std() * math.sqrt(252)
-        sig_d = rets.rolling(self.vt_lookback).std().iloc[-1]
-        scored = self.equity + self.bonds
-
-        score = {}
-        for t in scored:
-            parts, wts = [], []
-            if self.use_vol_score:
-                parts.append(self._vol_score(rv[t]))
-                wts.append(self.w_vol)
-            if self.use_dist_score:
-                parts.append(self._dist_score(t, df[t].iloc[-1], sig_d[t], rows))
-                wts.append(self.w_dist)
-            score[t] = sum(w * p for w, p in zip(wts, parts)) / sum(wts)
-        if any(pd.isna(v) for v in score.values()):
+        mom = self._momentum(df)
+        hurdle = mom.get(self.cash, 0.0)
+        se = self._sleeve(self.equity, self.n_eq, mom, hurdle, rows)
+        sb = self._sleeve(self.bonds, self.n_bd, mom, hurdle, rows)
+        if se is None or sb is None:
             return None, {}
 
-        # Equity sleeve: relative ranking
-        eq = self._top(score, self.equity, self.n_eq)
-        tilt_e = {c: max(score[c] + 10.0, 1.0) for c in eq}
-        w_eq = self._cap_normalize(tilt_e, self.max_sleeve_weight)
-
-        # Volatility target on the selected equity basket (126 days, through the current bar)
-        sig_eq, scale = float("nan"), 1.0
-        if self.use_vol_target:
-            r = sum(rets[c].iloc[-self.vt_lookback:] * w_eq[c] for c in eq)
-            sig_eq = float(r.std() * math.sqrt(252))
-            if sig_eq > 0:
-                scale = min(1.0, self.vt_target / sig_eq)
-        e_t = min(max(self.e_anchor * scale, self.e_floor), self.e_anchor)
-        # Sleeve cap must also respect the portfolio-level single-ETF limit
-        w_eq = self._cap_normalize(tilt_e, min(self.max_sleeve_weight, self.max_weight / e_t))
-
-        # Bond sleeve: absolute gate (score > 0), unallocated share goes to cash
-        bd = self._top(score, self.bonds, self.n_bd)
-        tilt_b = {c: max(score[c], 0.0) for c in bd}
-        bond_budget = 1.0 - self.cash_min - e_t
-        cap_b = min(self.max_sleeve_weight, self.max_weight / bond_budget)
-        w_bd = self._cap_normalize(tilt_b, cap_b) if sum(tilt_b.values()) > 0 else {c: 0.0 for c in bd}
-
         tgt = {a: 0.0 for a in self.trading}
-        for c in eq:
-            tgt[c] = e_t * w_eq[c]
-        for c in bd:
-            tgt[c] = bond_budget * w_bd[c]
+        for c, ok in se.items():
+            tgt[c] = (self.e_floor + (self.e_anchor - self.e_floor) * (1.0 if ok else 0.0)) / len(se)
+        e_t = sum(tgt[c] for c in se)
+        bond_budget = 1.0 - self.cash_min - e_t
+        for c, ok in sb.items():
+            tgt[c] = bond_budget / len(sb) if ok else 0.0
         tgt[self.cash] = max(0.0, 1.0 - sum(v for k, v in tgt.items() if k != self.cash) - 1e-9)
-        return tgt, dict(equity_target=e_t, vol_scale=scale, equity_vol=sig_eq)
+        info = dict(equity=e_t, pe=sum(se.values()), ne=len(se), pb=sum(sb.values()), nb=len(sb))
+        return tgt, info
 
     def _valid(self, w):
         e = sum(w[c] for c in self.equity)
         return (sum(w.values()) <= 1.0 + 1e-9 and min(w.values()) >= -1e-12
                 and max(v for k, v in w.items() if k != self.cash) <= self.max_weight + 1e-9
-                and self.e_floor - 1e-9 <= e <= self.e_ceil + 1e-9)
+                and self.e_floor - 1e-9 <= e <= self.e_anchor + 1e-9)
 
     def _alloc(self, w):
         out = {a: float(w.get(a, 0.0)) for a in self.trading}
@@ -229,7 +248,7 @@ class TradingStrategy(Strategy):
     # ---------- strategy ----------
     def run(self, data):
         ohlcv = data["ohlcv"]
-        if len(ohlcv) < 0:
+        if len(ohlcv) < self.min_bars:
             return TargetAllocation({})  # not enough history: stay in cash
 
         holdings = data.get("holdings") or {}
@@ -238,10 +257,10 @@ class TradingStrategy(Strategy):
         equity_now = sum(cur[a] for a in self.equity)
 
         # Rebalance triggers
-        new_period = self._period(ohlcv[-1]) != self._period(ohlcv[-2])
+        new_month = self._stamp(ohlcv[-1])[:7] != self._stamp(ohlcv[-2])[:7]
         if invested < 0.5:
             reason = "initial"
-        elif new_period:
+        elif new_month:
             reason = "scheduled"
         elif equity_now < self.e_floor - 1e-9 or equity_now > self.e_ceil + 1e-9:
             reason = "band"
@@ -249,25 +268,24 @@ class TradingStrategy(Strategy):
             return self._alloc(cur)  # between rebalances: keep current holdings, no trades
 
         rows = ohlcv[-self.bars:]
-        df = self._frame(rows)
+        df = self._closes(rows)
         held = invested >= 0.5
         fallback = self._alloc(cur) if held else TargetAllocation({})
-        # Scored ETFs need the full window; BIL (cash) only needs a current price
-        if df[self.equity + self.bonds].isna().any().any() or pd.isna(df[self.cash].iloc[-1]):
+        if pd.isna(df[self.cash].iloc[-1]):
             if held:
-                log("%s|SKIP_MISSING_DATA_KEPT_HOLDINGS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
+                log("%s|SKIP_NO_CASH_PRICE_KEPT_HOLDINGS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
             return fallback
 
         tgt, info = self._target(df, rows)
         if tgt is None:
             if held:
-                log("%s|SKIP_INSUFFICIENT_SCORES_KEPT_HOLDINGS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
+                log("%s|SKIP_INSUFFICIENT_HISTORY_KEPT_HOLDINGS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
             return fallback
         if not self._valid(tgt):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
             return fallback
 
-        log("%s|%s|eq=%.3f|scale=%.2f|eqvol=%.3f|%s" % (
-            self._stamp(ohlcv[-1])[:10], reason, info["equity_target"], info["vol_scale"], info["equity_vol"],
+        log("%s|%s|eq=%.3f|pass_eq=%d/%d|pass_bd=%d/%d|%s" % (
+            self._stamp(ohlcv[-1])[:10], reason, info["equity"], info["pe"], info["ne"], info["pb"], info["nb"],
             ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
