@@ -7,11 +7,11 @@ import math
 
 class TradingStrategy(Strategy):
     """
-    Conservative: monthly Dual Momentum (12-1) with a trend gate, inside a fixed equity band.
+    Moderate: monthly Dual Momentum (12-1) with a trend gate, inside a fixed equity band.
     Long only, no leverage, daily bars, rebalance on the first bar of each month.
 
-    Risk profile: anchor 40% equity, band 30% to 45% (references: Vanguard LifeStrategy Conservative Growth (40/60) and
-    American Century "Conservative" sample portfolio at 45% equity). The rest is bonds and short-term (BIL >= 2%).
+    Risk profile: anchor 60% equity, band 50% to 65% (references: Vanguard LifeStrategy Moderate Growth (60/40) and
+    American Century "Moderate" sample portfolio at 64% equity). The rest is bonds and short-term (BIL >= 2%).
 
     Universe: Equity VTI VIG XLV XLP XLU EFA VWO VNQ | Bonds AGG SHY IEF TLT TIP LQD | Cash BIL
     (SPY is listed in `assets` for benchmarking only and always receives a 0% target.)
@@ -32,17 +32,17 @@ class TradingStrategy(Strategy):
 
     Allocation (all weights are slots of 1/4):
       Equity slot  = (floor + (anchor - floor) * pass) / 4 : a passing slot gets its full weight, a failing slot
-                     drops to its band-floor weight, so equity always stays inside [30%, 40%].
+                     drops to its band-floor weight, so equity always stays inside [50%, 60%].
       Bond slot    = bond budget / 4 if it passes, else 0 (the share goes to BIL). Bond budget = 1 - equity - 2%.
       BIL          = 2% minimum plus every unallocated share.
 
     Surmount specifics:
       - Stateless: decisions use only data["ohlcv"] (history to the current bar) and data["holdings"].
       - Between rebalances the strategy returns current holdings (no trades). A rebalance also happens if the
-        equity share of the holdings leaves the band [30%, 45%] or if nothing is held yet.
+        equity share of the holdings leaves the band [50%, 65%] or if nothing is held yet.
       - Hard limits are checked before every rebalance and the strategy fails closed (keeps current holdings):
         weights sum to at most 1 | no negative weights | single ETF (cash excluded) <= 25%
-        | equity share inside [30%, 40%].
+        | equity share inside [50%, 60%].
       - Audit trail: one log() line per rebalance (date, reason, equity budget, passes, weights) and one line per
         refused or skipped rebalance on a held portfolio.
       - Missing data, too little history or missing holdings never raise.
@@ -61,9 +61,9 @@ class TradingStrategy(Strategy):
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Risk profile band
-        self.e_anchor = 0.4
-        self.e_floor = 0.3
-        self.e_ceil = 0.45
+        self.e_anchor = 0.6
+        self.e_floor = 0.5
+        self.e_ceil = 0.65
         self.cash_min = 0.02
         self.max_weight = 0.25
 
@@ -248,7 +248,7 @@ class TradingStrategy(Strategy):
     # ---------- strategy ----------
     def run(self, data):
         ohlcv = data["ohlcv"]
-        if len(ohlcv) < 1:
+        if len(ohlcv) < self.min_bars:
             return TargetAllocation({})  # not enough history: stay in cash
 
         holdings = data.get("holdings") or {}
