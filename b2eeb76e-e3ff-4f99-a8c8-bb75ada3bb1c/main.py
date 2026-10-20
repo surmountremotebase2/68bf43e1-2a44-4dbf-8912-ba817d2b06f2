@@ -74,8 +74,8 @@ class TradingStrategy(Strategy):
         self.vt_target = 0.10
 
         # Selection
-        self.n_eq = 3
-        self.n_bd = 2
+        self.n_eq = 4
+        self.n_bd = 3
         self.max_sleeve_weight = 0.50
 
         # Rebalance schedule: every 3 months (calendar quarters), plus regime triggers
