@@ -41,7 +41,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "VXUS", "SDIV", "XSVM", "PDP", "SPVM", "EEMO", "XLV", "QQQ", "RSP", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
+        self.bonds = ["AGG", "SHY", "IEF", "TLT", "BND", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
         self.gold = "GLD"        # ratio gate reference, never traded
@@ -51,8 +51,8 @@ class TradingStrategy(Strategy):
         self.e_anchor = 0.6
         self.e_floor = 0.5
         self.e_ceil = 0.65
-        self.cash_min = 0.02
-        self.max_weight = 0.25
+        self.cash_min = 0.005
+        self.max_weight = 0.35
 
         # Dual momentum (12-1)
         self.mom_lookback = 252
@@ -62,21 +62,21 @@ class TradingStrategy(Strategy):
         self.ratio_sma = 100
 
         # SPY ATR risk-off
-        self.atr_fast = 21
+        self.atr_fast = 10
         self.atr_slow = 100
         self.atr_dist = 252
-        self.atr_q = 0.8               # top two deciles
+        self.atr_q = 0.9               # top two deciles
         self.atr_min_obs = 100
 
         # Volatility targeting
         self.use_vol_target = True
         self.vt_lookback = 126
-        self.vt_target = 0.15
+        self.vt_target = 0.10
 
         # Selection
         self.n_eq = 3
         self.n_bd = 2
-        self.max_sleeve_weight = 0.40
+        self.max_sleeve_weight = 0.50
 
         # Rebalance schedule: every 3 months (calendar quarters), plus regime triggers
         self.rebalance_months = 1
