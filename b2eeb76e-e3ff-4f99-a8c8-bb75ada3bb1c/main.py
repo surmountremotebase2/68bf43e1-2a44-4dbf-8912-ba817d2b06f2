@@ -59,7 +59,7 @@ class TradingStrategy(Strategy):
         self.mom_skip = 21
 
         # GLD ratio gate
-        self.ratio_sma = 100
+        self.ratio_sma = 50
 
         # SPY ATR risk-off
         self.atr_fast = 10
