@@ -41,10 +41,10 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "VXUS", "XSVM", "PDP", "SPVM", "XLV", "RSP", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "SHY", "IEF", "TLT", "BND", "TIP", "LQD"]
+        self.bonds = ["AGG", "SHY", "IEF", "TLT", "GLD", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
-        self.gold = "GLD"        # ratio gate reference, never traded
+        self.gold = "BND"        # ratio gate reference, never traded
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Risk profile band
