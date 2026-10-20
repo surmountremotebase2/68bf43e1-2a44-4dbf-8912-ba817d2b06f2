@@ -1,40 +1,50 @@
 from surmount.base_class import Strategy, TargetAllocation
+from surmount.technical_indicators import ATR
 from surmount.logging import log
-import numpy as np
 import pandas as pd
 import math
 
 
 class TradingStrategy(Strategy):
     """
-    Moderate: ROAR + dual momentum ETF allocation inside a fixed equity band. Long only, no leverage, daily bars.
+    Moderate: dual momentum ETF allocation with a gold-ratio gate and an SPY ATR risk-off switch.
+    Long only, no leverage, daily bars.
 
-    Risk profile: anchor 60% equity, band 50% to 65% (BIL >= 2%).
-    Universe: 16 equity ETFs, 6 bond ETFs, BIL as cash. SPY is benchmark only (always 0%).
+    Risk profile: anchor 60% equity, band 50% to 65% (BIL >= 2%) in the normal regime.
+    Universe: 16 equity ETFs, 6 bond ETFs, BIL as cash. SPY (ATR regime) and GLD (ratio gate) are data only, always 0%.
 
-    Score per ETF, from data up to the current bar only (range -10 to +10):
-      ROAR score   = MA20/50/150 rating, direction and strength scores + vol-decile score - blended % change,
-                     smoothed 10 days, mapped with clip((ROAR - 50) / 5).
-      Momentum     = 0.5 * relative + 0.5 * absolute, on the 12-1 return (close[-22] / close[-253] - 1):
-                     relative = percentile rank inside the sleeve (equity or bond), mapped to -10..+10
-                     absolute = +10 if the asset's 12-1 return beats BIL's, else -10
-      Score        = (1 - w_mom) * ROAR + w_mom * Momentum
-    Asset gate: any ETF with close below its 220-day EMA is excluded from selection (both sleeves).
-    BIL is exempt. Bonds also need Score > 0.
+    Score per ETF (-10 to +10), dual momentum on the 12-1 return (close[-22] / close[-253] - 1):
+      relative = percentile rank inside its sleeve (equity or bond), mapped to -10..+10
+      absolute = +10 if the ETF's 12-1 return beats BIL's, else -10
+      Score    = 0.5 * relative + 0.5 * absolute
 
-    If the gate leaves too few equities to fill the equity band under the 25% single-ETF cap, the equity budget
-    shrinks to what the passing names can hold (min of budget and n_names * 25%), the shortfall goes to bonds that
-    pass the gate, then BIL. The gate overrides the 50% floor in that case, and the "band" trigger does not fire.
-    History: needs 200 bars; the 12-1 lookback and the EMA use up to 253 / all fetched bars. With less than 253
-    bars the momentum lookback shortens automatically (the rebalance log line shows the lookback used).
+    Asset gate (replaces the EMA gate): ratio = ETF close / GLD close. The ETF is selectable only if the ratio
+    is above its own 100-day SMA. BIL is exempt. Bonds also need Score > 0.
+
+    Risk-off: SPY ATR(10) >= 80th percentile of its last 252 ATR(10) values (top two deciles), OR ATR(10) > ATR(100).
+    When true, equity is excluded and only the bond sleeve is allocated (rest in BIL). Risk-off overrides the
+    50% equity floor, like the gate does.
+
+    Allocation (unchanged otherwise): equity top 5, weights proportional to (score + 10), max 40% of sleeve and 25%
+    of portfolio; equity budget = anchor * min(1, 15% / 126d basket vol), kept in [floor, anchor]; bond top 4 with
+    score > 0 proportional to score; unallocated share to BIL. If the gate leaves too few equities, the equity
+    budget shrinks to n_names * 25% and the band floor is relaxed.
+
+    Triggers: first bar of a calendar quarter, nothing held yet, equity above the band, and (regime_daily=True)
+    equity held while risk-off, or equity below the floor. regime_daily=False: schedule and upper band only.
+
+    History: needs 200 bars, fetches up to 260. With fewer than 253 bars the 12-1 lookback shortens
+    (rebalance log shows mom_lb). The ATR(10) distribution uses the available values, up to 252.
+    Never raises: missing data or history keeps current holdings (or cash if none), and every skip is logged.
     """
 
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "VXUS", "SDIV", "XSVM", "PDP", "SPVM", "EEMO", "XLV", "QQQ", "RSP", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "GLD", "UUP", "SHY", "IEF", "BND", "TIP", "LQD"]
+        self.bonds = ["AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
         self.cash = "BIL"
-        self.benchmark = "SPY"
+        self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
+        self.gold = "GLD"        # ratio gate reference, never traded
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Risk profile band
@@ -44,31 +54,19 @@ class TradingStrategy(Strategy):
         self.cash_min = 0.02
         self.max_weight = 0.25
 
-        # ROAR scoring
-        self.vol_window = 15
-        self.vol_lookback = 126
-        self.sig_window = 126          # daily-vol estimate used for scaling
-        self.ref_vol = 0.01            # SPY-like daily vol reference
-        self.slope_win = 252           # window for slope percentile thresholds
-        self.s_thr = 0.022             # 0.1 price units on SPY ~450, in vol-normalised units
-        self.a_thr = 0.011             # 0.05
-        self.r_thr = 0.0044            # 0.02
-        self.smooth = 10
-        self.roar_neutral = 50.0
-        self.roar_scale = 5.0
-        # (period, w_ma, w_dir, w_str, strength thresholds)
-        self.ma_cfg = [
-            (20, 0.12, 0.12, 0.08, [-0.02, 0.03, 0.05, 0.08]),
-            (50, 0.12, 0.12, 0.08, [-0.05, 0.04, 0.08, 0.12]),
-            (150, 0.08, 0.05, 0.05, [-0.05, 0.05, 0.10, 0.15]),
-        ]
-        self.w_vol = 0.10
+        # Dual momentum (12-1)
+        self.mom_lookback = 252
+        self.mom_skip = 21
 
-        # Dual momentum (12-1) and EMA gate
-        self.mom_lookback = 253 - 1    # 12 months of bars back from the current bar
-        self.mom_skip = 21             # skip the last month
-        self.w_mom = 0.5               # weight of momentum in the final score
-        self.ema_days = 220
+        # GLD ratio gate
+        self.ratio_sma = 100
+
+        # SPY ATR risk-off
+        self.atr_fast = 10
+        self.atr_slow = 100
+        self.atr_dist = 252
+        self.atr_q = 0.8               # top two deciles
+        self.atr_min_obs = 100
 
         # Volatility targeting
         self.use_vol_target = True
@@ -80,18 +78,16 @@ class TradingStrategy(Strategy):
         self.n_bd = 4
         self.max_sleeve_weight = 0.40
 
-        # Rebalance schedule: every 3 months (calendar quarters)
+        # Rebalance schedule: every 3 months (calendar quarters), plus regime triggers
         self.rebalance_months = 3
+        self.regime_daily = True
 
-        # Fetched window (more history = better EMA and full 12-1); minimum needed to trade is min_bars.
         self.min_bars = 200
-        # History: MA150 + slope percentile (min 30) + 10-day smoothing = 190 bars, 200 with margin.
-        # Kept below the 221 the previous version needed: the platform may cap the lookback it hands to run().
         self.bars = 260
 
     @property
     def assets(self):
-        return self.trading + [self.benchmark]
+        return self.trading + [self.benchmark, self.gold]
 
     @property
     def interval(self):
@@ -116,8 +112,9 @@ class TradingStrategy(Strategy):
             return -1
 
     def _frame(self, rows):
-        return pd.DataFrame({t: [bar[t]["close"] if t in bar else float("nan") for bar in rows]
-                             for t in self.trading})
+        """Close prices of trading universe + GLD. Missing tickers become NaN."""
+        cols = self.trading + [self.gold]
+        return pd.DataFrame({t: [bar[t]["close"] if t in bar else float("nan") for bar in rows] for t in cols})
 
     @staticmethod
     def _top(score, universe, n):
@@ -142,74 +139,30 @@ class TradingStrategy(Strategy):
                 w[k] += excess * w[k] / s
         return w
 
-    def _roar(self, close):
-        """ROAR score of the last bar mapped to -10..+10. NaN if not computable."""
-        idx = close.index
-        rets = close.pct_change()
-        sig = rets.rolling(self.sig_window, min_periods=60).std()
-        k = sig / self.ref_vol
-        total = pd.Series(0.0, index=idx)
-        a = self.a_thr
+    def _risk_off(self, rows):
+        """True if SPY ATR(10) is in the top 2 deciles of the last 252 values or above ATR(100). None if unknown."""
+        try:
+            a_f = ATR(self.benchmark, rows, self.atr_fast)
+            a_s = ATR(self.benchmark, rows, self.atr_slow)
+        except Exception:
+            return None
+        if not a_f or not a_s:
+            return None
+        s_f = pd.Series(a_f).dropna()
+        cur_s = a_s[-1]
+        if len(s_f) < self.atr_min_obs or pd.isna(cur_s):
+            return None
+        win = s_f.iloc[-self.atr_dist:]
+        cur_f = s_f.iloc[-1]
+        return bool(cur_f >= win.quantile(self.atr_q) or cur_f > cur_s)
 
-        for period, w_ma, w_dir, w_str, th in self.ma_cfg:
-            ma = close.rolling(period).mean()
-            slope = ma.diff() / (ma * sig)
-            accel = slope.diff()
-            rec = accel.rolling(3).mean()
-
-            # Rating by curvature: 1 Buy, 0 Hold, -1 Sell (NaN comparisons fall to Hold)
-            buy = (slope > self.s_thr) & (accel > a) & (rec > 0)
-            sell = (slope < -self.s_thr) | ((accel < -a) & (rec < -self.r_thr))
-            rating = np.select([buy, sell], [1, -1], 0)
-            ma_score = np.select([rating == 1, rating == 0], [5, 2], 0)
-
-            # Direction: 0 Strongest, 1 Strengthening, 2 Average, 3 Weakening, 4 Weakest
-            thr_s = slope.rolling(self.slope_win, min_periods=30).quantile(0.65)
-            thr_w = slope.rolling(self.slope_win, min_periods=30).quantile(0.35)
-            cat = np.select([slope > thr_s,
-                             (slope < thr_w) & (accel < -a),
-                             (slope < thr_w) & (accel > a),
-                             (slope > thr_w) & (accel < -a)], [0, 4, 1, 3], 2)
-            dir_buy, dir_hold, dir_sell = np.array([5, 4, 2, 1, 0]), np.array([3, 2, 2, 1, 0]), np.array([0, 0, 0, 1, 2])
-            dir_score = np.where(rating == 1, dir_buy[cat], np.where(rating == 0, dir_hold[cat], dir_sell[cat]))
-
-            # Strength: 0 Weak, 1 Soft, 2 Average, 3 Strong, 4 Maximum (thresholds scaled by vol)
-            pct = close.pct_change(periods=period)
-            t = [x * k for x in th]
-            code = np.select([pct.isna(), pct <= t[0], pct <= t[1], pct <= t[2], pct <= t[3]], [2, 0, 1, 2, 3], 4)
-            str_ns, str_s = np.array([0, 1, 2, 4, 5]), np.array([2, 1, 1, 0, 0])
-            str_score = np.where(rating == -1, str_s[code], str_ns[code])
-
-            total += w_ma * pd.Series(ma_score, index=idx)
-            total += w_dir * pd.Series(dir_score, index=idx)
-            total += w_str * pd.Series(str_score, index=idx)
-
-        # Inverse realised-vol decile score vs the prior distribution (current bar excluded)
-        rv = rets.rolling(self.vol_window).std() * math.sqrt(252)
-        prev = rv.shift(1)
-        decs = [prev.rolling(self.vol_lookback, min_periods=20).quantile(i / 10.0) for i in range(1, 10)]
-        rank = sum((rv > d).astype(int) for d in decs)
-        vscore = (10.0 - rank * (20.0 / 9.0)).where(rv.notna() & decs[0].notna())
-        total += self.w_vol * vscore
-
-        blend = (close.pct_change(5) + close.pct_change(10) + close.pct_change(20) + close.pct_change(50)) / 4.0
-        raw = total * 25.0 - (blend / k) * 100.0
-        roar = raw.rolling(self.smooth).mean().iloc[-1]
-        if pd.isna(roar):
-            return float("nan")
-        return max(-10.0, min(10.0, (float(roar) - self.roar_neutral) / self.roar_scale))
-
-    def _target(self, df):
+    def _target(self, df, risk_off):
         """Target weights from data up to the current bar. Returns (weights dict or None, info dict)."""
         rets = df.pct_change()
         scored = self.equity + self.bonds
         n = len(df)
 
-        roar = {t: self._roar(df[t]) for t in scored}
-        if any(pd.isna(v) for v in roar.values()):
-            return None, {}
-
-        # 12-1 momentum over the longest lookback available
+        # Dual momentum over the longest lookback available
         L = min(self.mom_lookback, n - 1)
         mom = df.iloc[-1 - self.mom_skip] / df.iloc[-1 - L] - 1.0
         if mom[scored + [self.cash]].isna().any():
@@ -220,12 +173,16 @@ class TradingStrategy(Strategy):
             for t in group:
                 rel = (rk[t] - 0.5) * 20.0
                 ab = 10.0 if mom[t] > mom[self.cash] else -10.0
-                score[t] = (1.0 - self.w_mom) * roar[t] + self.w_mom * (0.5 * rel + 0.5 * ab)
+                score[t] = 0.5 * rel + 0.5 * ab
 
-        # Asset gate: below the 220-day EMA means excluded
-        ema = df.ewm(span=self.ema_days, adjust=False).mean().iloc[-1]
-        up = {t: bool(df[t].iloc[-1] >= ema[t]) for t in scored}
-        eq = self._top(score, [t for t in self.equity if up[t]], self.n_eq)
+        # Gate: ETF/GLD ratio above its 100-day SMA
+        ratio = df[scored].div(df[self.gold], axis=0)
+        sma = ratio.rolling(self.ratio_sma).mean().iloc[-1]
+        if sma.isna().any():
+            return None, {}
+        up = {t: bool(ratio[t].iloc[-1] > sma[t]) for t in scored}
+
+        eq = [] if risk_off else self._top(score, [t for t in self.equity if up[t]], self.n_eq)
         bd = self._top(score, [t for t in self.bonds if up[t] and score[t] > 0], self.n_bd)
 
         # Equity sleeve with volatility target
@@ -240,9 +197,9 @@ class TradingStrategy(Strategy):
                 if sig_eq > 0:
                     scale = min(1.0, self.vt_target / sig_eq)
             e_t = min(max(self.e_anchor * scale, self.e_floor), self.e_anchor)
-            e_t = min(e_t, len(eq) * self.max_weight)  # passing names must be able to hold it under the 25% cap
+            e_t = min(e_t, len(eq) * self.max_weight)
             w_eq = self._cap_normalize(tilt_e, min(sleeve_cap, self.max_weight / e_t))
-        gate_limited = e_t < self.e_floor - 1e-9
+        limited = e_t < self.e_floor - 1e-9
 
         # Bond sleeve: gated, score > 0, unallocated share goes to cash
         bond_budget = 1.0 - self.cash_min - e_t
@@ -258,7 +215,7 @@ class TradingStrategy(Strategy):
         for c in bd:
             tgt[c] = bond_budget * w_bd[c]
         tgt[self.cash] = max(0.0, 1.0 - sum(v for k, v in tgt.items() if k != self.cash) - 1e-9)
-        return tgt, dict(equity_target=e_t, vol_scale=scale, equity_vol=sig_eq, gate_limited=gate_limited,
+        return tgt, dict(equity_target=e_t, vol_scale=scale, equity_vol=sig_eq, limited=limited,
                          n_eq=len(eq), n_bd=len(bd), mom_lb=L)
 
     def _valid(self, w, relax_floor=False):
@@ -270,6 +227,7 @@ class TradingStrategy(Strategy):
     def _alloc(self, w):
         out = {a: float(w.get(a, 0.0)) for a in self.trading}
         out[self.benchmark] = 0.0
+        out[self.gold] = 0.0
         total = sum(out.values())
         if total > 1.0:
             out = {k: v / total for k, v in out.items()}
@@ -281,43 +239,49 @@ class TradingStrategy(Strategy):
         if len(ohlcv) < self.min_bars:
             if len(ohlcv) % 50 == 0:
                 log("WAITING_FOR_HISTORY|have=%d|need=%d" % (len(ohlcv), self.min_bars))
-            return TargetAllocation({})  # not enough history: stay in cash
+            return TargetAllocation({})
 
         holdings = data.get("holdings") or {}
         cur = {a: float(holdings.get(a) or 0.0) for a in self.trading}
         invested = sum(cur.values())
         equity_now = sum(cur[a] for a in self.equity)
+        stamp = self._stamp(ohlcv[-1])[:10]
+
+        rows = ohlcv[-self.bars:]
+        risk_off = bool(self._risk_off(rows))  # unknown regime counts as risk-on
 
         new_period = self._period(ohlcv[-1]) != self._period(ohlcv[-2])
         if invested < 0.5:
             reason = "initial"
         elif new_period:
             reason = "scheduled"
-        elif equity_now < self.e_floor - 1e-9 or equity_now > self.e_ceil + 1e-9:
+        elif self.regime_daily and risk_off and equity_now > 0.05:
+            reason = "risk_off"
+        elif equity_now > self.e_ceil + 1e-9 or (self.regime_daily and equity_now < self.e_floor - 1e-9):
             reason = "band"
         else:
             return self._alloc(cur)
 
-        rows = ohlcv[-self.bars:]
         df = self._frame(rows)
         held = invested >= 0.5
         fallback = self._alloc(cur) if held else TargetAllocation({})
-        if df[self.equity + self.bonds].isna().any().any() or pd.isna(df[self.cash].iloc[-1]):
-            log("%s|SKIP_MISSING_DATA|held=%s|%s" % (self._stamp(ohlcv[-1])[:10], held, reason))
+        need = self.equity + self.bonds + [self.gold]
+        if df[need].isna().any().any() or pd.isna(df[self.cash].iloc[-1]):
+            log("%s|SKIP_MISSING_DATA|held=%s|%s" % (stamp, held, reason))
             return fallback
 
-        tgt, info = self._target(df)
+        tgt, info = self._target(df, risk_off)
         if tgt is None:
-            log("%s|SKIP_INSUFFICIENT_SCORES|held=%s|%s" % (self._stamp(ohlcv[-1])[:10], held, reason))
+            log("%s|SKIP_INSUFFICIENT_DATA|held=%s|%s" % (stamp, held, reason))
             return fallback
-        if reason == "band" and info["gate_limited"]:
-            return self._alloc(cur)  # equity is low because of the EMA gate, not drift: do not churn
-        if not self._valid(tgt, info["gate_limited"]):
-            log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
+        if reason == "band" and info["limited"]:
+            return self._alloc(cur)  # equity is low because of the filters, not drift: do not churn
+        if not self._valid(tgt, info["limited"]):
+            log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (stamp, reason))
             return fallback
 
-        log("%s|%s|eq=%.3f|scale=%.2f|eqvol=%.3f|pass=%d/%d|mom_lb=%d|%s" % (
-            self._stamp(ohlcv[-1])[:10], reason, info["equity_target"], info["vol_scale"], info["equity_vol"],
+        log("%s|%s|riskoff=%s|eq=%.3f|scale=%.2f|eqvol=%.3f|pass=%d/%d|mom_lb=%d|%s" % (
+            stamp, reason, risk_off, info["equity_target"], info["vol_scale"], info["equity_vol"],
             info["n_eq"], info["n_bd"], info["mom_lb"],
             ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
