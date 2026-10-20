@@ -63,7 +63,7 @@ class TradingStrategy(Strategy):
             (50, 0.12, 0.12, 0.08, [-0.05, 0.04, 0.08, 0.12]),
             (150, 0.08, 0.05, 0.05, [-0.05, 0.05, 0.10, 0.15]),
         ]
-        self.w_vol = 0.05
+        self.w_vol = 0.10
 
         # Volatility targeting
         self.use_vol_target = True
