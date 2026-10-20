@@ -33,7 +33,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "XLV", "XLP", "XLU", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "SHY", "IEF", "TLT", "TIP", "LQD"]
+        self.bonds = ["AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"
         self.trading = self.equity + self.bonds + [self.cash]
@@ -68,7 +68,7 @@ class TradingStrategy(Strategy):
         # Volatility targeting
         self.use_vol_target = True
         self.vt_lookback = 126
-        self.vt_target = 0.15
+        self.vt_target = 0.10
 
         # Selection
         self.n_eq = 5
@@ -76,7 +76,7 @@ class TradingStrategy(Strategy):
         self.max_sleeve_weight = 0.40
 
         # Rebalance schedule: every 3 months (calendar quarters)
-        self.rebalance_months = 3
+        self.rebalance_months = 1
 
         # History: MA150 + slope percentile (min 30) + 10-day smoothing = 190 bars, 200 with margin.
         # Kept below the 221 the previous version needed: the platform may cap the lookback it hands to run().
