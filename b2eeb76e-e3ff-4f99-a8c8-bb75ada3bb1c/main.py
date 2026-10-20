@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         # Universe
-        self.equity = ["VTI", "VIG", "XLV", "XLP", "XLU", "EFA", "VWO", "VNQ"]
+        self.equity = ["VT", "VXUS", "ACWV", "SPYG", "SDIV", "SPYV", "XLV", "XLP", "IJT", "EFA", "VWO", "SOXX", "VNQ"]
         self.bonds = ["AGG", "SHY", "IEF", "TLT", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"
@@ -63,7 +63,7 @@ class TradingStrategy(Strategy):
             (50, 0.12, 0.12, 0.08, [-0.05, 0.04, 0.08, 0.12]),
             (150, 0.08, 0.05, 0.05, [-0.05, 0.05, 0.10, 0.15]),
         ]
-        self.w_vol = 0.10
+        self.w_vol = 0.05
 
         # Volatility targeting
         self.use_vol_target = True
