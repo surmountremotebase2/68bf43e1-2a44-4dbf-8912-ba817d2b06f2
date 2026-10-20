@@ -49,10 +49,10 @@ class TradingStrategy(Strategy):
 
         # Risk profile band
         self.e_anchor = 0.6
-        self.e_floor = 0.5
-        self.e_ceil = 0.65
+        self.e_floor = 0.4
+        self.e_ceil = 0.8
         self.cash_min = 0.005
-        self.max_weight = 0.35
+        self.max_weight = 0.25
 
         # Dual momentum (12-1)
         self.mom_lookback = 252
