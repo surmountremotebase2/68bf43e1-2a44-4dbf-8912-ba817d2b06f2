@@ -55,7 +55,7 @@ class TradingStrategy(Strategy):
         self.a_thr = 0.011             # 0.05
         self.r_thr = 0.0044            # 0.02
         self.smooth = 10
-        self.roar_neutral = 50.0
+        self.roar_neutral = 30.0
         self.roar_scale = 5.0
         # (period, w_ma, w_dir, w_str, strength thresholds)
         self.ma_cfg = [
@@ -283,7 +283,7 @@ class TradingStrategy(Strategy):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
             return fallback
 
-        log("%s|%s|eq=%.3f|scale=%.2f|eqvol=%.3f|%s" % (
-            self._stamp(ohlcv[-1])[:10], reason, info["equity_target"], info["vol_scale"], info["equity_vol"],
-            ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
+        #log("%s|%s|eq=%.3f|scale=%.2f|eqvol=%.3f|%s" % (
+        #    self._stamp(ohlcv[-1])[:10], reason, info["equity_target"], info["vol_scale"], info["equity_vol"],
+        #    ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
