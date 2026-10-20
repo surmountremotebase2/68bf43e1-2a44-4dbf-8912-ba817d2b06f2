@@ -40,7 +40,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         # Universe
-        self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "VXUS", "XSVM", "PDP", "SPVM", "XLV", "RSP", "EFA", "VWO", "VNQ"]
+        self.equity = ["VTI", "VIG", "VXUS", "XSVM", "PDP", "SPVM", "XLV", "RSP", "EFA", "VWO", "VNQ"]
         self.bonds = ["AGG", "SHY", "IEF", "BND", "GLD", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
