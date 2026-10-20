@@ -63,7 +63,7 @@ class TradingStrategy(Strategy):
 
         # SPY ATR risk-off
         self.atr_fast = 10
-        self.atr_slow = 100
+        self.atr_slow = 50
         self.atr_dist = 252
         self.atr_q = 0.9               # top two deciles
         self.atr_min_obs = 100
