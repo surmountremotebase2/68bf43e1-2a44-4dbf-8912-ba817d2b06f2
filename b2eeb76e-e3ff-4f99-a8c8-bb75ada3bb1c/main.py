@@ -280,8 +280,8 @@ class TradingStrategy(Strategy):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (stamp, reason))
             return fallback
 
-        log("%s|%s|riskoff=%s|eq=%.3f|scale=%.2f|eqvol=%.3f|pass=%d/%d|mom_lb=%d|%s" % (
-            stamp, reason, risk_off, info["equity_target"], info["vol_scale"], info["equity_vol"],
-            info["n_eq"], info["n_bd"], info["mom_lb"],
-            ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
+        #log("%s|%s|riskoff=%s|eq=%.3f|scale=%.2f|eqvol=%.3f|pass=%d/%d|mom_lb=%d|%s" % (
+        #    stamp, reason, risk_off, info["equity_target"], info["vol_scale"], info["equity_vol"],
+        #    info["n_eq"], info["n_bd"], info["mom_lb"],
+        #    ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
