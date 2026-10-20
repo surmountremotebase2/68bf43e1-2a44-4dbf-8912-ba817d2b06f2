@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         # Universe
-        self.equity = ["VT", "VXUS", "ACWV", "SPYG", "SDIV", "SPYV", "XLV", "XLP", "IJT", "EFA", "VWO", "SOXX", "VNQ"]
+        self.equity = ["VTI", "VIG", "XLV", "XLP", "XLU", "EFA", "VWO", "VNQ"]
         self.bonds = ["AGG", "SHY", "IEF", "TLT", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"
@@ -78,8 +78,9 @@ class TradingStrategy(Strategy):
         # Rebalance schedule: every 3 months (calendar quarters)
         self.rebalance_months = 3
 
-        # History: MA150 + slope percentile (min 60) + 10-day smoothing, with margin
-        self.bars = 260
+        # History: MA150 + slope percentile (min 30) + 10-day smoothing = 190 bars, 200 with margin.
+        # Kept below the 221 the previous version needed: the platform may cap the lookback it hands to run().
+        self.bars = 200
 
     @property
     def assets(self):
@@ -156,8 +157,8 @@ class TradingStrategy(Strategy):
             ma_score = np.select([rating == 1, rating == 0], [5, 2], 0)
 
             # Direction: 0 Strongest, 1 Strengthening, 2 Average, 3 Weakening, 4 Weakest
-            thr_s = slope.rolling(self.slope_win, min_periods=60).quantile(0.65)
-            thr_w = slope.rolling(self.slope_win, min_periods=60).quantile(0.35)
+            thr_s = slope.rolling(self.slope_win, min_periods=30).quantile(0.65)
+            thr_w = slope.rolling(self.slope_win, min_periods=30).quantile(0.35)
             cat = np.select([slope > thr_s,
                              (slope < thr_w) & (accel < -a),
                              (slope < thr_w) & (accel > a),
@@ -246,6 +247,10 @@ class TradingStrategy(Strategy):
     # ---------- strategy ----------
     def run(self, data):
         ohlcv = data["ohlcv"]
+        if len(ohlcv) < self.bars:
+            if len(ohlcv) % 50 == 0:
+                log("WAITING_FOR_HISTORY|have=%d|need=%d" % (len(ohlcv), self.bars))
+            return TargetAllocation({})  # not enough history: stay in cash
 
         holdings = data.get("holdings") or {}
         cur = {a: float(holdings.get(a) or 0.0) for a in self.trading}
@@ -267,14 +272,12 @@ class TradingStrategy(Strategy):
         held = invested >= 0.5
         fallback = self._alloc(cur) if held else TargetAllocation({})
         if df[self.equity + self.bonds].isna().any().any() or pd.isna(df[self.cash].iloc[-1]):
-            if held:
-                log("%s|SKIP_MISSING_DATA_KEPT_HOLDINGS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
+            log("%s|SKIP_MISSING_DATA|held=%s|%s" % (self._stamp(ohlcv[-1])[:10], held, reason))
             return fallback
 
         tgt, info = self._target(df)
         if tgt is None:
-            if held:
-                log("%s|SKIP_INSUFFICIENT_SCORES_KEPT_HOLDINGS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
+            log("%s|SKIP_INSUFFICIENT_SCORES|held=%s|%s" % (self._stamp(ohlcv[-1])[:10], held, reason))
             return fallback
         if not self._valid(tgt):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (self._stamp(ohlcv[-1])[:10], reason))
