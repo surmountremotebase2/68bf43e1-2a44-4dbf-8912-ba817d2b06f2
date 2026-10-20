@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "VXUS", "SDIV", "XSVM", "PDP", "SPVM", "EEMO", "XLV", "QQQ", "RSP", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
+        self.bonds = ["AGG", "GLD", "UUP", "SHY", "IEF", "BND", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"
         self.trading = self.equity + self.bonds + [self.cash]
