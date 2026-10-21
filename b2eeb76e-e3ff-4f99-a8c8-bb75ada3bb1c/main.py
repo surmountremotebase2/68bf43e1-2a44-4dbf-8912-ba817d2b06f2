@@ -68,10 +68,10 @@ class TradingStrategy(Strategy):
         self.ratio_sma = 100
 
         # SPY ATR risk-off
-        self.atr_fast = 20
+        self.atr_fast = 10
         self.atr_slow = 30
         self.atr_dist = 252
-        self.atr_q = 0.8               # top two deciles
+        self.atr_q = 0.9               # top two deciles
         self.atr_min_obs = 100
 
         # Volatility targeting
@@ -81,7 +81,7 @@ class TradingStrategy(Strategy):
 
         # Selection
         self.n_eq = 5
-        self.n_bd = 4
+        self.n_bd = 3
         self.max_sleeve_weight = 0.40
 
         # Rebalance schedule: monthly (3 = calendar quarters), plus regime triggers
