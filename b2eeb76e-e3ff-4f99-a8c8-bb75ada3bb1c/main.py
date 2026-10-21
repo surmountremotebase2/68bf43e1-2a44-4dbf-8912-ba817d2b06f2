@@ -20,6 +20,8 @@ class TradingStrategy(Strategy):
 
     Asset gate (replaces the EMA gate): ratio = ETF close / GLD close. The ETF is selectable only if the ratio
     is above its own 100-day SMA. BIL is exempt. Bonds also need Score > 0.
+    Absolute momentum filter (abs_mom_filter): an ETF whose 12-1 return does not beat BIL's is excluded outright,
+    in both sleeves. Its share falls to BIL. This is what lets the portfolio sit in cash when stocks AND bonds fall.
 
     Risk-off: SPY ATR(10) >= 80th percentile of its last 252 ATR(10) values (top two deciles), OR ATR(10) > ATR(100).
     When true, equity is excluded and only the bond sleeve is allocated (rest in BIL). Risk-off overrides the
@@ -30,8 +32,9 @@ class TradingStrategy(Strategy):
     score > 0 proportional to score; unallocated share to BIL. If the gate leaves too few equities, the equity
     budget shrinks to n_names * 25% and the band floor is relaxed.
 
-    Triggers: first bar of a calendar quarter, nothing held yet, equity above the band, and (regime_daily=True)
-    equity held while risk-off, or equity below the floor. regime_daily=False: schedule and upper band only.
+    Triggers: first bar of a rebalance period (rebalance_months=1: monthly), nothing held yet, equity above the band, and (regime_daily=True, off by default)
+    equity held while risk-off, or equity below the floor. Default: schedule and upper band only.
+    No-trade band: a held position is left alone if its target moves less than 2% of the portfolio.
 
     History: needs 200 bars, fetches up to 260. With fewer than 253 bars the 12-1 lookback shortens
     (rebalance log shows mom_lb). The ATR(10) distribution uses the available values, up to 252.
@@ -40,47 +43,51 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         # Universe
-        self.equity = ["VTI", "VIG", "VXUS", "XSVM", "PDP", "SPVM", "XLV", "RSP", "EFA", "VWO", "VNQ"]
-        self.bonds = ["AGG", "SHY", "IEF", "BND", "GLD", "TIP", "LQD"]
+        self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "VXUS", "SDIV", "XSVM", "PDP", "SPVM", "EEMO", "XLV", "QQQ", "RSP", "EFA", "VWO", "VNQ"]
+        self.bonds = ["AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
-        self.gold = "TLT"        # ratio gate reference, never traded
+        self.gold = "GLD"        # ratio gate reference, never traded
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Risk profile band
         self.e_anchor = 0.6
-        self.e_floor = 0.4
-        self.e_ceil = 0.8
-        self.cash_min = 0.005
+        self.e_floor = 0.5
+        self.e_ceil = 0.65
+        self.cash_min = 0.02
         self.max_weight = 0.25
 
         # Dual momentum (12-1)
         self.mom_lookback = 252
         self.mom_skip = 21
 
+        # Hard absolute momentum filter (12-1 return must beat BIL's)
+        self.abs_mom_filter = True
+
         # GLD ratio gate
-        self.ratio_sma = 50
+        self.ratio_sma = 100
 
         # SPY ATR risk-off
         self.atr_fast = 10
-        self.atr_slow = 50
+        self.atr_slow = 100
         self.atr_dist = 252
-        self.atr_q = 0.9               # top two deciles
+        self.atr_q = 0.8               # top two deciles
         self.atr_min_obs = 100
 
         # Volatility targeting
         self.use_vol_target = True
         self.vt_lookback = 126
-        self.vt_target = 0.10
+        self.vt_target = 0.15
 
         # Selection
-        self.n_eq = 4
-        self.n_bd = 3
-        self.max_sleeve_weight = 0.50
+        self.n_eq = 5
+        self.n_bd = 4
+        self.max_sleeve_weight = 0.40
 
-        # Rebalance schedule: every 3 months (calendar quarters), plus regime triggers
+        # Rebalance schedule: monthly (3 = calendar quarters), plus regime triggers
         self.rebalance_months = 1
-        self.regime_daily = True
+        self.regime_daily = False   # True = rebalance on any regime flip (heavy turnover)
+        self.min_trade = 0.02       # no-trade band: keep a held position if its target moves less than this
 
         self.min_bars = 200
         self.bars = 260
@@ -182,8 +189,9 @@ class TradingStrategy(Strategy):
             return None, {}
         up = {t: bool(ratio[t].iloc[-1] > sma[t]) for t in scored}
 
-        eq = [] if risk_off else self._top(score, [t for t in self.equity if up[t]], self.n_eq)
-        bd = self._top(score, [t for t in self.bonds if up[t] and score[t] > 0], self.n_bd)
+        pos = {t: (not self.abs_mom_filter) or bool(mom[t] > mom[self.cash]) for t in scored}
+        eq = [] if risk_off else self._top(score, [t for t in self.equity if up[t] and pos[t]], self.n_eq)
+        bd = self._top(score, [t for t in self.bonds if up[t] and pos[t] and score[t] > 0], self.n_bd)
 
         # Equity sleeve with volatility target
         sig_eq, scale, e_t, w_eq = float("nan"), 1.0, 0.0, {}
@@ -217,6 +225,16 @@ class TradingStrategy(Strategy):
         tgt[self.cash] = max(0.0, 1.0 - sum(v for k, v in tgt.items() if k != self.cash) - 1e-9)
         return tgt, dict(equity_target=e_t, vol_scale=scale, equity_vol=sig_eq, limited=limited,
                          n_eq=len(eq), n_bd=len(bd), mom_lb=L)
+
+    def _sticky(self, tgt, cur):
+        """Skip small trades: keep a held position when the target is within min_trade of it. BIL absorbs the rest."""
+        out = dict(tgt)
+        for a in self.trading:
+            if a != self.cash and cur[a] > 0 and out[a] > 0 and cur[a] <= self.max_weight \
+                    and abs(out[a] - cur[a]) < self.min_trade:
+                out[a] = cur[a]
+        out[self.cash] = max(0.0, 1.0 - sum(v for k, v in out.items() if k != self.cash) - 1e-9)
+        return out
 
     def _valid(self, w, relax_floor=False):
         e = sum(w[c] for c in self.equity)
@@ -276,12 +294,15 @@ class TradingStrategy(Strategy):
             return fallback
         if reason == "band" and info["limited"]:
             return self._alloc(cur)  # equity is low because of the filters, not drift: do not churn
+        if held:
+            tgt = self._sticky(tgt, cur)
         if not self._valid(tgt, info["limited"]):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (stamp, reason))
             return fallback
 
-        #log("%s|%s|riskoff=%s|eq=%.3f|scale=%.2f|eqvol=%.3f|pass=%d/%d|mom_lb=%d|%s" % (
-        #    stamp, reason, risk_off, info["equity_target"], info["vol_scale"], info["equity_vol"],
-        #    info["n_eq"], info["n_bd"], info["mom_lb"],
-        #    ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
+        turn = sum(abs(tgt[a] - cur[a]) for a in self.trading) / 2.0
+        log("%s|%s|riskoff=%s|turn=%.3f|eq=%.3f|scale=%.2f|eqvol=%.3f|pass=%d/%d|mom_lb=%d|%s" % (
+            stamp, reason, risk_off, turn, info["equity_target"], info["vol_scale"], info["equity_vol"],
+            info["n_eq"], info["n_bd"], info["mom_lb"],
+            ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
