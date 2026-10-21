@@ -44,10 +44,10 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "PDP", "EEMO", "XLV", "QQQ", "RSP", "EFA", "IJT"]
-        self.bonds = ["AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
+        self.bonds = ["GLD", "AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
-        self.gold = "GLD"        # ratio gate reference, never traded
+        self.gold = "TLT"        # ratio gate reference, never traded
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Risk profile band
@@ -62,10 +62,10 @@ class TradingStrategy(Strategy):
         self.mom_skip = 21
 
         # Hard absolute momentum filter (12-1 return must beat BIL's)
-        self.abs_mom_filter = False
+        self.abs_mom_filter = True
 
         # GLD ratio gate
-        self.ratio_sma = 50
+        self.ratio_sma = 100
 
         # SPY ATR risk-off
         self.atr_fast = 10
