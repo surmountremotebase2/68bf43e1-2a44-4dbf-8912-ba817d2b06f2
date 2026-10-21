@@ -75,7 +75,7 @@ class TradingStrategy(Strategy):
         self.atr_min_obs = 100
 
         # Volatility targeting
-        self.use_vol_target = True
+        self.use_vol_target = False
         self.vt_lookback = 126
         self.vt_target = 0.15
 
