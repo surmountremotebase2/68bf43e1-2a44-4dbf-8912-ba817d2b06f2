@@ -68,8 +68,8 @@ class TradingStrategy(Strategy):
         self.ratio_sma = 100
 
         # SPY ATR risk-off
-        self.atr_fast = 10
-        self.atr_slow = 100
+        self.atr_fast = 20
+        self.atr_slow = 30
         self.atr_dist = 252
         self.atr_q = 0.8               # top two deciles
         self.atr_min_obs = 100
