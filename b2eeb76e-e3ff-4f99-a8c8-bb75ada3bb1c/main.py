@@ -44,7 +44,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VTI", "VIG", "SPHQ", "IDHQ", "PDP", "EEMO", "XLV", "QQQ", "RSP", "EFA", "IJT"]
-        self.bonds = ["GLD", "AGG", "SHY", "IEF", "BND", "TIP", "LQD"]
+        self.bonds = ["GLD", "AGG", "IEF", "BND", "TIP", "LQD"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
         self.gold = "TLT"        # ratio gate reference, never traded
@@ -54,12 +54,12 @@ class TradingStrategy(Strategy):
         self.e_anchor = 0.6
         self.e_floor = 0.5
         self.e_ceil = 0.65
-        self.cash_min = 0.02
+        self.cash_min = 0.005
         self.max_weight = 0.4
 
         # Dual momentum (12-1)
-        self.mom_lookback = 300
-        self.mom_skip = 15
+        self.mom_lookback = 220
+        self.mom_skip = 30
 
         # Hard absolute momentum filter (12-1 return must beat BIL's)
         self.abs_mom_filter = True
