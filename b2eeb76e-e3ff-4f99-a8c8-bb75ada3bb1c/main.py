@@ -58,8 +58,8 @@ class TradingStrategy(Strategy):
         self.max_weight = 0.4
 
         # Dual momentum (12-1)
-        self.mom_lookback = 210
-        self.mom_skip = 21
+        self.mom_lookback = 300
+        self.mom_skip = 15
 
         # Hard absolute momentum filter (12-1 return must beat BIL's)
         self.abs_mom_filter = True
