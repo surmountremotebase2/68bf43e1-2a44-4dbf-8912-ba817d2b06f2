@@ -44,7 +44,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         # Universe
         self.equity = ["VT", "IXN", "GSLC", "VIG", "MTUM", "IMTM", "XLV", "XLU", "XLE", "XLP", "QQQ", "RSP", "EFA", "IJT"]
-        self.bonds = ["GLD", "AGG", "IEF", "BND", "TIP", "TLT"]
+        self.bonds = ["GLD", "SHY", "AGG", "IEF", "BND", "TIP", "TLT"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
         self.gold = "EWY"        # ratio gate reference, never traded
@@ -81,7 +81,7 @@ class TradingStrategy(Strategy):
 
         # Selection
         self.n_eq = 5
-        self.n_bd = 3
+        self.n_bd = 2
         self.max_sleeve_weight = 0.40
 
         # Rebalance schedule: monthly (3 = calendar quarters), plus regime triggers
