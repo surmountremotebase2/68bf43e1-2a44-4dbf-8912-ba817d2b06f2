@@ -47,7 +47,7 @@ class TradingStrategy(Strategy):
         self.bonds = ["GLD", "AGG", "IEF", "BND", "TIP", "TLT"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark and ATR regime source, never traded
-        self.gold = "TLT"        # ratio gate reference, never traded
+        self.gold = "EWY"        # ratio gate reference, never traded
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Risk profile band
