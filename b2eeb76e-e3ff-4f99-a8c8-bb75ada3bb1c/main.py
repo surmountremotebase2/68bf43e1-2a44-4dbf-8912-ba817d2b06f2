@@ -58,20 +58,20 @@ class TradingStrategy(Strategy):
         self.max_weight = 0.4
 
         # Dual momentum (12-1)
-        self.mom_lookback = 180
+        self.mom_lookback = 220
         self.mom_skip = 30
 
         # Hard absolute momentum filter (12-1 return must beat BIL's)
         self.abs_mom_filter = True
 
         # GLD ratio gate
-        self.ratio_sma = 100
+        self.ratio_sma = 80
 
         # SPY ATR risk-off
         self.atr_fast = 10
         self.atr_slow = 50
         self.atr_dist = 252
-        self.atr_q = 0.9               # top two deciles
+        self.atr_q = 0.95               # top two deciles
         self.atr_min_obs = 100
 
         # Volatility targeting
