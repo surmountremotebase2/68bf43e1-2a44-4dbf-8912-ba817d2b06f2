@@ -34,6 +34,17 @@ class TradingStrategy(Strategy):
       5. Optional abs_gate (off by default): an ETF with negative Clenow Momentum goes to BIL, and the equity floor is relaxed.
     Between rebalances the strategy returns the current holdings (no trades).
 
+    Drawdown control (both on by default, each can be switched off):
+      A. Asset volatility cap (vol_cap): inside each sleeve, an ETF whose 90-day annualised volatility is above 2x
+         the sleeve median is dropped for that rebalance (named as vcap=... in the log). Skipped if it would leave
+         fewer than 3 ETFs in the sleeve.
+      B. Portfolio volatility target (vol_target): the realised 63-day volatility of the target weights is
+         measured; if it is above 6%, all risk weights are scaled by 6% / vol (floor 0.2), the rest goes to BIL.
+         Long only, never levered. This lets equity fall below the band floor in turbulent markets; the ceiling stays.
+      C. De-risk trigger (vt_trigger): between monthly rebalances, if the realised volatility of the current holdings
+         exceeds 1.5x the target, rebalance now, but only if that cuts risk exposure by at least 5 points.
+         Re-risking waits for the next monthly rebalance, so volatility flicker does not create churn.
+
     Known limit: relative scaling alone gives no protection when everything falls together (2022 type markets),
     because the normalisation cancels a uniform decline. abs_gate is the only defence here.
 
@@ -70,6 +81,17 @@ class TradingStrategy(Strategy):
         self.e_ceil = 0.45
         self.max_weight = 0.25
         self.abs_gate = False
+
+        # Drawdown control
+        self.vol_cap = True
+        self.vol_cap_mult = 2.0       # drop an ETF if its vol > this x the sleeve median
+        self.vol_target = True
+        self.vt_target = 0.06         # annualised portfolio volatility target
+        self.vt_lookback = 63
+        self.vt_min_scale = 0.2
+        self.vt_trigger = True
+        self.vt_trigger_mult = 1.5
+        self.vt_min_cut = 0.05        # a de-risk trigger must cut exposure by at least this much
 
         # Monthly rebalance
         self.rebalance_months = 1
@@ -109,6 +131,15 @@ class TradingStrategy(Strategy):
         return pd.DataFrame({t: [bar[t]["close"] if t in bar else float("nan") for bar in rows]
                              for t in self.trading})
 
+    def _port_vol(self, df, w):
+        """Annualised realised volatility of weights w (cash excluded) over the last vt_lookback returns."""
+        names = [t for t in w if t != self.cash and w[t] > 0 and t in df.columns]
+        if not names:
+            return 0.0
+        rets = df[names].pct_change().iloc[-self.vt_lookback:].fillna(0.0)
+        r = sum(rets[t] * w[t] for t in names)
+        return float(r.std() * math.sqrt(252))
+
     @staticmethod
     def _clenow(closes):
         """Annualised exponential regression slope (%) times R^2, on the given closes."""
@@ -135,6 +166,16 @@ class TradingStrategy(Strategy):
         bd_u = [t for t in self.bonds if t in good]
         if len(eq_u) < self.min_names or len(bd_u) < self.min_names:
             return None, dict(dropped=dropped, n_eq=len(eq_u), n_bd=len(bd_u), why="TOO_FEW_ETFS")
+        rets = df.pct_change()
+        dropped_vol = []
+        if self.vol_cap:
+            for group in (eq_u, bd_u):
+                vol = {t: float(rets[t].iloc[-(n - 1):].std() * math.sqrt(252)) for t in group}
+                med = float(np.median(list(vol.values())))
+                keep = [t for t in group if vol[t] <= self.vol_cap_mult * med]
+                if len(keep) >= self.min_names and len(keep) < len(group):
+                    dropped_vol += [t for t in group if t not in keep]
+                    group[:] = keep
         scored = eq_u + bd_u
         base = {t: self.base_equity / len(eq_u) for t in eq_u}
         base.update({t: self.base_bonds / len(bd_u) for t in bd_u})
@@ -171,17 +212,31 @@ class TradingStrategy(Strategy):
                 if cm[t] < 0:
                     w[t] = 0.0
 
+        # Portfolio volatility target: scale risk weights down, never up
+        scale, pv = 1.0, float("nan")
+        if self.vol_target:
+            pv = self._port_vol(df, w)
+            if pv > 0:
+                scale = min(1.0, max(self.vt_min_scale, self.vt_target / pv))
+            for t in scored:
+                w[t] *= scale
+
+        # Single-ETF cap: the excess stays unallocated and goes to BIL
+        for t in scored:
+            w[t] = min(w[t], self.max_weight)
+
         tgt = {a: 0.0 for a in self.trading}
         tgt.update(w)
         tgt[self.cash] = max(0.0, 1.0 - sum(v for k, v in tgt.items() if k != self.cash) - 1e-9)
-        return tgt, dict(equity=sum(w[t] for t in eq_u), n_neg=n_neg, dropped=dropped, n_eq=len(eq_u), n_bd=len(bd_u))
+        return tgt, dict(equity=sum(w[t] for t in eq_u), n_neg=n_neg, dropped=dropped, n_eq=len(eq_u), n_bd=len(bd_u),
+                         vcap=dropped_vol, scale=scale, vol=pv)
 
     def _valid(self, w):
         e = sum(w[c] for c in self.equity)
         ok = (sum(w.values()) <= 1.0 + 1e-9 and min(w.values()) >= -1e-12
               and max(v for k, v in w.items() if k != self.cash) <= self.max_weight + 1e-9)
         if self.use_band:
-            ok = ok and e <= self.e_ceil + 1e-9 and (self.abs_gate or e >= self.e_floor - 1e-9)
+            ok = ok and e <= self.e_ceil + 1e-9 and (self.abs_gate or self.vol_target or e >= self.e_floor - 1e-9)
         return ok
 
     def _alloc(self, w):
@@ -209,6 +264,12 @@ class TradingStrategy(Strategy):
             reason = "initial"
         elif self._period(ohlcv[-1]) != self._period(ohlcv[-2]):
             reason = "scheduled"
+        elif self.vol_target and self.vt_trigger:
+            df0 = self._frame(ohlcv[-self.bars:]).ffill(limit=self.ffill_limit)
+            if self._port_vol(df0, cur) > self.vt_trigger_mult * self.vt_target:
+                reason = "vol_breach"
+            else:
+                return self._alloc(cur)
         else:
             return self._alloc(cur)  # between rebalances: keep current holdings, no trades
 
@@ -220,12 +281,18 @@ class TradingStrategy(Strategy):
             log("%s|SKIP_%s|held=%s|%s|eq_ok=%d|bd_ok=%d|dropped=%s" % (
                 stamp, info["why"], held, reason, info["n_eq"], info["n_bd"], ",".join(info["dropped"])))
             return fallback
+        if reason == "vol_breach":
+            risk_tgt = sum(v for k, v in tgt.items() if k != self.cash)
+            risk_cur = sum(cur[a] for a in self.trading if a != self.cash)
+            if risk_tgt > risk_cur - self.vt_min_cut:
+                return self._alloc(cur)  # de-risk only: ignore triggers that would not cut exposure
         if not self._valid(tgt):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (stamp, reason))
             return fallback
 
         turn = sum(abs(tgt[a] - cur[a]) for a in self.trading) / 2.0
-        log("%s|%s|eq=%.3f|neg=%d|turn=%.3f|dropped=%s|%s" % (
-            stamp, reason, info["equity"], info["n_neg"], turn, ",".join(info["dropped"]) or "-",
+        log("%s|%s|eq=%.3f|vol=%.3f|scale=%.2f|neg=%d|turn=%.3f|dropped=%s|vcap=%s|%s" % (
+            stamp, reason, info["equity"], info["vol"], info["scale"], info["n_neg"], turn,
+            ",".join(info["dropped"]) or "-", ",".join(info["vcap"]) or "-",
             ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
