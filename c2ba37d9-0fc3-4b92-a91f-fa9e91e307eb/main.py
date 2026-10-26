@@ -48,19 +48,19 @@ class TradingStrategy(Strategy):
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights
-        self.base_equity = 0.40
-        self.base_bonds = 0.55
+        self.base_equity = 0.50
+        self.base_bonds = 0.45
         self.cash_min = 0.05
 
         # Clenow Momentum and weight scaling
         self.mom_window = 90
-        self.m_min = 0.7
-        self.m_max = 2.0
+        self.m_min = 0.3
+        self.m_max = 1.5
 
         # Risk profile
         self.use_band = True
-        self.e_floor = 0.5
-        self.e_ceil = 0.65
+        self.e_floor = 0.3
+        self.e_ceil = 0.5
         self.max_weight = 0.25
         self.abs_gate = False
 
