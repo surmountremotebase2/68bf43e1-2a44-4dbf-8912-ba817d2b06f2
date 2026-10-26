@@ -6,8 +6,9 @@ import math
 
 
 class TradingStrategy(Strategy):
+    
     """
-    Clenow-style dynamic tactical allocation: static strategic weights, scaled monthly by Clenow Momentum.
+    Clenow-style dynamic tactical allocation: static strategic base weights, scaled monthly by Clenow Momentum.
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
 
     Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025) and his Investopedia series on
@@ -15,13 +16,13 @@ class TradingStrategy(Strategy):
     holding, scale each weight up or down by its momentum (at most halved or doubled), normalise back to 100%.
     Clenow Momentum comes from "Stocks on the Move": annualised exponential regression slope times R^2.
 
-    What is from the source, and what is my assumption (the slides give no code):
-      Source:     monthly rebalance | same holdings and weights as the base portfolio | Clenow Momentum =
-                  ((exp(slope)^252 - 1) * 100) * R^2 | weights scaled by momentum, at most halved or doubled | normalise.
-      Assumption: 90-day regression window (the value used in Stocks on the Move)
-                  base weights: 60% equity equal-weighted over 16 ETFs, 38% bonds equal-weighted over 6, 2% BIL
-                  rank-to-multiplier map: percentile rank inside each sleeve, lowest 0.5x, highest 2.0x, log-linear
-                  equity band 50% to 65% kept from the previous versions (use_band=False = pure Clenow, equity floats)
+    What is from the source, and what is the implementation specification:
+      Source:         monthly rebalance | same holdings and weights as the base portfolio | Clenow Momentum =
+                      ((exp(slope)^252 - 1) * 100) * R^2 | weights scaled by momentum, at most halved or doubled | normalise.
+      Implementation: 90-day regression window (standard window from Stocks on the Move)
+                      base weights: 70% equity equal-weighted over 14 ETFs (5.0% each), 28% bonds equal-weighted over 7 ETFs (4.0% each), 2% BIL min cash reserve
+                      rank-to-multiplier map: percentile rank inside each sleeve, lowest 0.5x, highest 2.0x, log-linear
+                      equity band 50% to 65%: total equity share bounded within [50%, 65%] (nominal 70% base equity capped at 65% in neutral state)
 
     Allocation at each monthly rebalance:
       1. Clenow Momentum per ETF on the last 90 closes.
@@ -38,6 +39,7 @@ class TradingStrategy(Strategy):
     equity inside the band (unless use_band is off or abs_gate relaxes the floor).
     History: needs 100 bars. Missing data or history never raises: every skip is logged.
     """
+
 
     def __init__(self):
         # Universe
