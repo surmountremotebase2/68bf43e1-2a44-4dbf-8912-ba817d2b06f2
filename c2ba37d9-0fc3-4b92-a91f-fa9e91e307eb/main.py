@@ -6,56 +6,63 @@ import math
 
 
 class TradingStrategy(Strategy):
-    """
-    Conservative: Clenow-style dynamic tactical allocation, static strategic weights scaled monthly by Clenow Momentum.
-    Long only, no leverage, daily bars, always invested (BIL is the cash holding).
+"""
+    Conservative: Clenow-style dynamic tactical allocation with monthly rebalancing, 
+    scaling baseline strategic sleeve weights by intra-sleeve Clenow Momentum.
+    Long only, no leverage, daily bars, always invested (BIL is the cash management holding).
 
-    Risk profile: anchor 40% equity, band 30% to 45% (reference: Vanguard LifeStrategy Conservative Growth, 40/60).
-    The rest is bonds (and GLD, which sits in the bond sleeve) and BIL (2%).
+    Risk profile: Target equity band constrained strictly between 30% and 45% (e_floor = 0.30, e_ceil = 0.45).
+    Baseline strategic targets set at 60% Equity, 35% Bonds (including GLD), and 5% Cash (BIL).
+    Note: Because baseline equity (60%) exceeds the 45% ceiling, the equity band logic systematically
+    rescales the equity sleeve down to 45% and the bond sleeve up to 50% during standard rebalances.
 
     Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025) and his Investopedia series on
-    dynamic asset allocation. Start from a fixed-weight portfolio, every month compute Clenow Momentum for every
-    holding, scale each weight up or down by its momentum (at most halved or doubled), normalise back to 100%.
-    Clenow Momentum comes from "Stocks on the Move": annualised exponential regression slope times R^2.
+    dynamic asset allocation. Monthly rebalances evaluate Clenow Momentum across all holdings to scale baseline 
+    weights up or down (between 0.5x and 2.0x), normalizing total risk asset exposure to 95% (5% BIL minimum floor).
+    Clenow Momentum comes from "Stocks on the Move": annualized exponential regression slope (%) times R^2.
 
-    What is from the source, and what is my assumption (the slides give no code):
-      Source:     monthly rebalance | same holdings and weights as the base portfolio | Clenow Momentum =
-                  ((exp(slope)^252 - 1) * 100) * R^2 | weights scaled by momentum, at most halved or doubled | normalise.
-      Assumption: 90-day regression window (the value used in Stocks on the Move)
-                  base weights: 40% equity equal-weighted over 14 ETFs, 58% bonds equal-weighted over 7, 2% BIL
-                  rank-to-multiplier map: percentile rank inside each sleeve, lowest 0.5x, highest 2.0x, log-linear
-                  equity band 30% to 45% (use_band=False = pure Clenow, equity floats)
+    Implementation Details & Operational Parameters:
+      - Universe: 11 Equity ETFs (VT, IXN, GSLC, VIG, XLV, XLU, XLE, XLP, SPY, EFA, IJT),
+                  6 Bond/Gold ETFs (GLD, AGG, IEF, BND, TIP, TLT), and 1 Cash ETF (BIL).
+      - Momentum Window: 90 daily closing prices (mom_window = 90).
+      - Multiplier Curve: Log-linear mapping from 0.5x (lowest rank) to 2.0x (highest rank) based on 
+        percentile rank inside each sleeve.
+      - Base Weights: 60% equity equal-weighted across active equity ETFs, 35% bonds equal-weighted 
+        across active bond ETFs, 5% cash floor (BIL).
+      - Equity Band: Bounded to [30%, 45%]. If initial risk allocation falls outside, equity and bond sleeves 
+        are scaled proportionally to enforce bounds.
+      - Absolute Gate (abs_gate, False by default): When enabled, assets with negative Clenow Momentum 
+        are zeroed out and routed to BIL.
 
-    Allocation at each monthly rebalance:
-      1. Clenow Momentum per ETF on the last 90 closes.
-      2. Multiplier per ETF = 0.5 * (2.0 / 0.5) ^ r, r = 0..1 percentile rank inside its sleeve.
-      3. Weight = base weight * multiplier, normalised so risk assets sum to 98%; BIL = 2%.
-      4. Equity band: if the equity share leaves [30%, 45%], both sleeves are rescaled to the nearest bound.
-      5. Optional abs_gate (off by default): an ETF with negative Clenow Momentum goes to BIL, and the equity floor is relaxed.
-    Between rebalances the strategy returns the current holdings (no trades).
+    Allocation Steps at Monthly Rebalance:
+      1. Compute Clenow Momentum for each ETF over the trailing 90 daily closes.
+      2. Calculate Intra-Sleeve Percentile Rank (r in [0, 1]) and Multiplier = 0.5 * (2.0 / 0.5) ^ r.
+      3. Scale base sleeve weights by multiplier; normalize total risk exposure to 95% (BIL = 5%).
+      4. Enforce Equity Band [30%, 45%]: Rescale equity and bond sleeves to nearest bound.
+      5. Apply Portfolio Volatility Target scaling (if enabled).
+      6. Cap single ETF exposures at 25.0% max_weight; excess routed to BIL.
 
-    Drawdown control (both on by default, each can be switched off):
-      A. Asset volatility cap (vol_cap): inside each sleeve, an ETF whose 90-day annualised volatility is above 2x
-         the sleeve median is dropped for that rebalance (named as vcap=... in the log). Skipped if it would leave
-         fewer than 3 ETFs in the sleeve.
-      B. Portfolio volatility target (vol_target): the realised 63-day volatility of the target weights is
-         measured; if it is above 6%, all risk weights are scaled by 6% / vol (floor 0.2), the rest goes to BIL.
-         Long only, never levered. This lets equity fall below the band floor in turbulent markets; the ceiling stays.
-      C. De-risk trigger (vt_trigger): between monthly rebalances, if the realised volatility of the current holdings
-         exceeds 1.5x the target, rebalance now, but only if that cuts risk exposure by at least 5 points.
-         Re-risking waits for the next monthly rebalance, so volatility flicker does not create churn.
+    Drawdown Control & Risk Rules:
+      A. Asset Volatility Cap (vol_cap, False by default): Inside each sleeve, any ETF whose 90-day 
+         annualized volatility exceeds 1.0x the sleeve median is dropped (vol_cap_mult = 1.0). 
+         Skipped if it would leave fewer than 3 active ETFs in the sleeve.
+      B. Portfolio Volatility Target (vol_target, True by default): Realized 90-day annualized volatility 
+         (vt_lookback = 90) of target weights is measured. If above 5.0% (vt_target = 0.05), all risk asset 
+         weights are scaled down by (5.0% / realized_vol) with a scaling floor of 0.10 (vt_min_scale = 0.1). 
+         Unallocated capital goes to BIL.
+      C. Off-Schedule De-Risk Trigger (vt_trigger, True by default): Between monthly rebalances, if realized 
+         90-day volatility of current holdings exceeds 1.5x target (7.5%), rebalance immediately, but ONLY if 
+         the new allocation cuts risk asset exposure by at least 25 percentage points (vt_min_cut = 0.25). 
+         Re-risking waits for scheduled monthly rebalances to eliminate churn.
 
-    Known limit: relative scaling alone gives no protection when everything falls together (2022 type markets),
-    because the normalisation cancels a uniform decline. abs_gate is the only defence here.
-
-    Guardrails (strategy fails closed and keeps holdings): sum <= 1, no negative weights, single ETF <= 25%,
-    equity inside the band (unless use_band is off or abs_gate relaxes the floor).
-    History: needs 100 bars. Missing data or history never raises: every skip is logged.
-    Data handling: short gaps (missing prints) are forward-filled up to 5 bars. A ticker that still has missing or
-    non-positive closes in the 90-day window is dropped for that rebalance (named in the log as dropped=...), and the
-    base weights are spread over the remaining ETFs of its sleeve. The rebalance is skipped only if fewer than 3
-    equity ETFs or fewer than 3 bond ETFs remain, or BIL has no price.
-    """
+    Guardrails & Data Safety:
+      - Requires minimum 100 historical daily bars to run. Missing data forward-filled up to 5 bars.
+      - Tickers with incomplete 90-day history or non-positive closes are dropped per rebalance.
+      - Rebalance skips (keeping prior holdings) if fewer than 3 usable Equity ETFs or 3 usable Bond ETFs 
+        remain, or if BIL pricing is unavailable.
+      - Fail-Closed Constraints: Total allocation <= 1.0, non-negative weights, single ETF <= 25%, 
+        equity bounded by band.
+"""
 
     def __init__(self):
         # Universe
