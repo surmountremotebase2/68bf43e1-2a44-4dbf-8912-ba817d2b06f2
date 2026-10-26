@@ -6,7 +6,7 @@ import math
 
 
 class TradingStrategy(Strategy):
-"""
+    """
     Conservative: Clenow-style dynamic tactical allocation with monthly rebalancing, 
     scaling baseline strategic sleeve weights by intra-sleeve Clenow Momentum.
     Long only, no leverage, daily bars, always invested (BIL is the cash management holding).
