@@ -61,8 +61,8 @@ class TradingStrategy(Strategy):
         self.use_band = True
         self.e_floor = 0.3
         self.e_ceil = 0.5
-        self.max_weight = 0.25
-        self.abs_gate = False
+        self.max_weight = 0.2
+        self.abs_gate = True
 
         # Monthly rebalance
         self.rebalance_months = 1
