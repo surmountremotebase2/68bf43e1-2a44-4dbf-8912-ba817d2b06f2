@@ -59,7 +59,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         # Universe
-        self.equity = ["VT", "IXN", "GSLC", "VIG", "MTUM", "IMTM", "XLV", "XLU", "XLE", "XLP", "QQQ", "RSP", "EFA", "IJT"]
+        self.equity = ["VT", "IXN", "GSLC", "VIG", "XLV", "XLU", "XLE", "XLP", "SPY", "EFA", "IJT"]
         self.bonds = ["GLD", "SHY", "AGG", "IEF", "BND", "TIP", "TLT"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark only, always 0%
@@ -84,10 +84,10 @@ class TradingStrategy(Strategy):
 
         # Drawdown control
         self.vol_cap = True
-        self.vol_cap_mult = 2.0       # drop an ETF if its vol > this x the sleeve median
+        self.vol_cap_mult = 1.0       # drop an ETF if its vol > this x the sleeve median
         self.vol_target = True
-        self.vt_target = 0.05         # annualised portfolio volatility target
-        self.vt_lookback = 126
+        self.vt_target = 0.10         # annualised portfolio volatility target
+        self.vt_lookback = 65
         self.vt_min_scale = 0.1
         self.vt_trigger = True
         self.vt_trigger_mult = 1.5
