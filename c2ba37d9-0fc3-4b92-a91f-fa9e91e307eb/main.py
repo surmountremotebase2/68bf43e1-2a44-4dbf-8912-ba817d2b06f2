@@ -59,7 +59,7 @@ class TradingStrategy(Strategy):
 
         # Risk profile
         self.use_band = True
-        self.e_floor = 0.3
+        self.e_floor = 0.5
         self.e_ceil = 0.5
         self.max_weight = 0.2
         self.abs_gate = True
