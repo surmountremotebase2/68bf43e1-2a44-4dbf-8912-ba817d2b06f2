@@ -7,8 +7,11 @@ import math
 
 class TradingStrategy(Strategy):
     """
-    Clenow-style dynamic tactical allocation: static strategic weights, scaled monthly by Clenow Momentum.
+    Conservative: Clenow-style dynamic tactical allocation, static strategic weights scaled monthly by Clenow Momentum.
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
+
+    Risk profile: anchor 40% equity, band 30% to 45% (reference: Vanguard LifeStrategy Conservative Growth, 40/60).
+    The rest is bonds (and GLD, which sits in the bond sleeve) and BIL (2%).
 
     Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025) and his Investopedia series on
     dynamic asset allocation. Start from a fixed-weight portfolio, every month compute Clenow Momentum for every
@@ -19,15 +22,15 @@ class TradingStrategy(Strategy):
       Source:     monthly rebalance | same holdings and weights as the base portfolio | Clenow Momentum =
                   ((exp(slope)^252 - 1) * 100) * R^2 | weights scaled by momentum, at most halved or doubled | normalise.
       Assumption: 90-day regression window (the value used in Stocks on the Move)
-                  base weights: 60% equity equal-weighted over 16 ETFs, 38% bonds equal-weighted over 6, 2% BIL
+                  base weights: 40% equity equal-weighted over 14 ETFs, 58% bonds equal-weighted over 7, 2% BIL
                   rank-to-multiplier map: percentile rank inside each sleeve, lowest 0.5x, highest 2.0x, log-linear
-                  equity band 50% to 65% kept from the previous versions (use_band=False = pure Clenow, equity floats)
+                  equity band 30% to 45% (use_band=False = pure Clenow, equity floats)
 
     Allocation at each monthly rebalance:
       1. Clenow Momentum per ETF on the last 90 closes.
       2. Multiplier per ETF = 0.5 * (2.0 / 0.5) ^ r, r = 0..1 percentile rank inside its sleeve.
       3. Weight = base weight * multiplier, normalised so risk assets sum to 98%; BIL = 2%.
-      4. Equity band: if the equity share leaves [50%, 65%], both sleeves are rescaled to the nearest bound.
+      4. Equity band: if the equity share leaves [30%, 45%], both sleeves are rescaled to the nearest bound.
       5. Optional abs_gate (off by default): an ETF with negative Clenow Momentum goes to BIL, and the equity floor is relaxed.
     Between rebalances the strategy returns the current holdings (no trades).
 
@@ -37,6 +40,10 @@ class TradingStrategy(Strategy):
     Guardrails (strategy fails closed and keeps holdings): sum <= 1, no negative weights, single ETF <= 25%,
     equity inside the band (unless use_band is off or abs_gate relaxes the floor).
     History: needs 100 bars. Missing data or history never raises: every skip is logged.
+    Data handling: short gaps (missing prints) are forward-filled up to 5 bars. A ticker that still has missing or
+    non-positive closes in the 90-day window is dropped for that rebalance (named in the log as dropped=...), and the
+    base weights are spread over the remaining ETFs of its sleeve. The rebalance is skipped only if fewer than 3
+    equity ETFs or fewer than 3 bond ETFs remain, or BIL has no price.
     """
 
     def __init__(self):
@@ -49,19 +56,19 @@ class TradingStrategy(Strategy):
 
         # Base (strategic) weights
         self.base_equity = 0.40
-        self.base_bonds = 0.50
-        self.cash_min = 0.1
+        self.base_bonds = 0.58
+        self.cash_min = 0.02
 
         # Clenow Momentum and weight scaling
-        self.mom_window = 250
+        self.mom_window = 90
         self.m_min = 0.5
         self.m_max = 2.0
 
         # Risk profile
         self.use_band = True
-        self.e_floor = 0.3
-        self.e_ceil = 0.4
-        self.max_weight = 0.3
+        self.e_floor = 0.30
+        self.e_ceil = 0.45
+        self.max_weight = 0.25
         self.abs_gate = False
 
         # Monthly rebalance
@@ -69,9 +76,8 @@ class TradingStrategy(Strategy):
 
         self.min_bars = 100
         self.bars = 130
-
-        self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({t: self.base_bonds / len(self.bonds) for t in self.bonds})
+        self.ffill_limit = 5      # forward-fill gaps up to this many bars
+        self.min_names = 3        # minimum usable ETFs per sleeve
 
     @property
     def assets(self):
@@ -115,39 +121,47 @@ class TradingStrategy(Strategy):
 
     def _target(self, df):
         """Target weights from data up to the current bar. Returns (weights dict or None, info dict)."""
+        df = df.ffill(limit=self.ffill_limit)
         scored = self.equity + self.bonds
         n = self.mom_window
         if len(df) < n:
-            return None, {}
+            return None, dict(dropped=[], n_eq=0, n_bd=0, why="HISTORY")
+        if pd.isna(df[self.cash].iloc[-1]):
+            return None, dict(dropped=[self.cash], n_eq=0, n_bd=0, why="BIL_NO_PRICE")
         win = df.iloc[-n:]
-        if win[scored].isna().any().any() or pd.isna(df[self.cash].iloc[-1]):
-            return None, {}
-        if (win[scored] <= 0).any().any():
-            return None, {}
+        good = [t for t in scored if win[t].notna().all() and (win[t] > 0).all()]
+        dropped = [t for t in scored if t not in good]
+        eq_u = [t for t in self.equity if t in good]
+        bd_u = [t for t in self.bonds if t in good]
+        if len(eq_u) < self.min_names or len(bd_u) < self.min_names:
+            return None, dict(dropped=dropped, n_eq=len(eq_u), n_bd=len(bd_u), why="TOO_FEW_ETFS")
+        scored = eq_u + bd_u
+        base = {t: self.base_equity / len(eq_u) for t in eq_u}
+        base.update({t: self.base_bonds / len(bd_u) for t in bd_u})
 
         cm = {t: self._clenow(win[t].values) for t in scored}
 
         # Momentum multiplier: percentile rank inside the sleeve, lowest m_min ... highest m_max
         mult = {}
-        for group in (self.equity, self.bonds):
+        for group in (eq_u, bd_u):
             rk = pd.Series({t: cm[t] for t in group}).rank(method="average")
             for t in group:
                 r = (rk[t] - 1.0) / (len(group) - 1.0)
                 mult[t] = self.m_min * (self.m_max / self.m_min) ** r
 
         risky = 1.0 - self.cash_min
-        raw = {t: self.base[t] * mult[t] for t in scored}
+        raw = {t: base[t] * mult[t] for t in scored}
         tot = sum(raw.values())
         w = {t: raw[t] / tot * risky for t in scored}
 
         # Equity band: rescale both sleeves to the nearest bound
         if self.use_band:
-            e = sum(w[t] for t in self.equity)
+            e = sum(w[t] for t in eq_u)
             e2 = min(max(e, self.e_floor), self.e_ceil)
             if abs(e2 - e) > 1e-12:
-                for t in self.equity:
+                for t in eq_u:
                     w[t] *= e2 / e
-                for t in self.bonds:
+                for t in bd_u:
                     w[t] *= (risky - e2) / (risky - e)
 
         # Optional absolute gate: negative Clenow Momentum goes to BIL
@@ -160,7 +174,7 @@ class TradingStrategy(Strategy):
         tgt = {a: 0.0 for a in self.trading}
         tgt.update(w)
         tgt[self.cash] = max(0.0, 1.0 - sum(v for k, v in tgt.items() if k != self.cash) - 1e-9)
-        return tgt, dict(equity=sum(w[t] for t in self.equity), n_neg=n_neg)
+        return tgt, dict(equity=sum(w[t] for t in eq_u), n_neg=n_neg, dropped=dropped, n_eq=len(eq_u), n_bd=len(bd_u))
 
     def _valid(self, w):
         e = sum(w[c] for c in self.equity)
@@ -203,14 +217,15 @@ class TradingStrategy(Strategy):
         df = self._frame(ohlcv[-self.bars:])
         tgt, info = self._target(df)
         if tgt is None:
-            log("%s|SKIP_MISSING_DATA|held=%s|%s" % (stamp, held, reason))
+            log("%s|SKIP_%s|held=%s|%s|eq_ok=%d|bd_ok=%d|dropped=%s" % (
+                stamp, info["why"], held, reason, info["n_eq"], info["n_bd"], ",".join(info["dropped"])))
             return fallback
         if not self._valid(tgt):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (stamp, reason))
             return fallback
 
         turn = sum(abs(tgt[a] - cur[a]) for a in self.trading) / 2.0
-        log("%s|%s|eq=%.3f|neg=%d|turn=%.3f|%s" % (
-            stamp, reason, info["equity"], info["n_neg"], turn,
+        log("%s|%s|eq=%.3f|neg=%d|turn=%.3f|dropped=%s|%s" % (
+            stamp, reason, info["equity"], info["n_neg"], turn, ",".join(info["dropped"]) or "-",
             ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
