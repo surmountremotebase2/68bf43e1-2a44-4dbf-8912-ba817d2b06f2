@@ -86,12 +86,12 @@ class TradingStrategy(Strategy):
         self.vol_cap = False
         self.vol_cap_mult = 1.0       # drop an ETF if its vol > this x the sleeve median
         self.vol_target = True
-        self.vt_target = 0.10         # annualised portfolio volatility target
-        self.vt_lookback = 126
-        self.vt_min_scale = 0.05
+        self.vt_target = 0.05         # annualised portfolio volatility target
+        self.vt_lookback = 90
+        self.vt_min_scale = 0.1
         self.vt_trigger = True
-        self.vt_trigger_mult = 1.0
-        self.vt_min_cut = 0.2        # a de-risk trigger must cut exposure by at least this much
+        self.vt_trigger_mult = 1.5
+        self.vt_min_cut = 0.25        # a de-risk trigger must cut exposure by at least this much
 
         # Monthly rebalance
         self.rebalance_months = 1
