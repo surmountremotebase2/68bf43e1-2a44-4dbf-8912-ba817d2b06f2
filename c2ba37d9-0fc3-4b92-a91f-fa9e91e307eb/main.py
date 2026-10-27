@@ -12,11 +12,11 @@ class TradingStrategy(Strategy):
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
 
     Risk profile: Conservative (capital preservation first, income second).
-      Base mix: 30% equity, 65% defensive (bonds + 6% gold), 5% BIL.
-      Equity band: 20% to 35%. Momentum multiplier 0.75x to 1.33x.
-      abs_gate ON: an ETF with negative Clenow Momentum goes to BIL (this is what limits 2022 type losses).
-      Trend circuit breaker: when VT closes below its 200-day average, equity is cut to 25% of its
-      target weight and the difference goes to BIL. Checked daily, acts only on the crossing day, and
+      Base mix: 50% equity, 50% defensive (bonds + 6% gold), scaled to 95% total risk + 5% BIL minimum cash.
+      Equity band: 20% to 35%. Momentum multiplier 0.75x to 1.20x.
+      abs_gate ON: an ETF with negative Clenow Momentum goes to BIL.
+      Trend circuit breaker: when SPY closes below its 200-day average, equity is cut to 10% of its
+      target weight and the difference goes to BIL. Checked daily, acts on the crossing day, and
       is exempt from the equity floor. Back above the average, a fresh target is computed.
 
     Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025).
@@ -28,7 +28,7 @@ class TradingStrategy(Strategy):
       3. Weight = base weight * multiplier, normalised so risk assets sum to 95%; BIL = 5%.
       4. Equity band: if the equity share leaves [20%, 35%], both sleeves are rescaled to the nearest bound.
       5. abs_gate: negative Clenow Momentum goes to BIL.
-      6. If the trend breaker is active, equity is cut (see above).
+      6. If the trend breaker is active, equity is cut to 10% of target (see above).
     Between rebalances the strategy returns the current holdings, except on a trend crossing day.
 
     Guardrails (fail closed, keep holdings): sum <= 1, no negative weights, single ETF <= 25%,
@@ -44,7 +44,7 @@ class TradingStrategy(Strategy):
         self.benchmark = "SPY"   # benchmark only, always 0%
         self.trading = self.equity + self.bonds + [self.cash]
 
-        # Base (strategic) weights: 30 / 65 / 5
+        # Base (strategic) weights: 50 / 50 base scaled to 95% risk + 5% cash
         self.base_equity = 0.50
         self.base_bonds = 0.45
         self.cash_min = 0.05
@@ -52,7 +52,7 @@ class TradingStrategy(Strategy):
         # Clenow Momentum and weight scaling
         self.mom_window = 90
         self.m_min = 0.75
-        self.m_max = 1.2
+        self.m_max = 1.20
 
         # Risk profile
         self.use_band = True
@@ -65,7 +65,7 @@ class TradingStrategy(Strategy):
         self.use_trend = True
         self.trend_ticker = "SPY"
         self.trend_window = 200
-        self.trend_keep = 0.1   # share of the equity target kept while risk-off
+        self.trend_keep = 0.10   # share of the equity target kept while risk-off (10% kept, 90% cut)
 
         # Monthly rebalance
         self.rebalance_months = 1
@@ -118,7 +118,7 @@ class TradingStrategy(Strategy):
         return (math.exp(slope) ** 252 - 1.0) * 100.0 * r2
 
     def _risk_off(self, rows):
-        """True if the trend ticker closes below its trend_window average at the last bar. None if data is missing."""
+        """True if trend ticker (SPY) closes below its 200-day average at last bar. None if data missing."""
         n = self.trend_window
         if len(rows) < n:
             return None
@@ -128,7 +128,7 @@ class TradingStrategy(Strategy):
         return c[-1] < sum(c) / n
 
     def _derisk(self, w):
-        """Keep trend_keep of each equity weight, move the rest to BIL."""
+        """Keep trend_keep (10%) of each equity weight, move the rest (90%) to BIL."""
         out = dict(w)
         cut = sum(out[t] for t in self.equity) * (1.0 - self.trend_keep)
         for t in self.equity:
