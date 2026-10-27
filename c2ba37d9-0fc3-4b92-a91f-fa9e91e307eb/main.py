@@ -6,65 +6,59 @@ import math
 
 
 class TradingStrategy(Strategy):
-    
+
     """
-    Clenow-style dynamic tactical allocation: static strategic base weights, scaled monthly by Clenow Momentum.
+    Conservative Clenow-style dynamic tactical allocation: static strategic base weights, scaled monthly by Clenow Momentum.
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
 
-    Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025) and his Investopedia series on
-    dynamic asset allocation. Start from a fixed-weight portfolio, every month compute Clenow Momentum for every
-    holding, scale each weight up or down by its momentum (at most halved or doubled), normalise back to 100%.
-    Clenow Momentum comes from "Stocks on the Move": annualised exponential regression slope times R^2.
+    Risk profile: Conservative (capital preservation first, income second).
+      Base mix: 30% equity, 65% bonds, 5% BIL.
+      Equity band: 20% to 35%.
+      Momentum multiplier: 0.75x to 1.33x (narrow tilts).
+      abs_gate ON: an ETF with negative Clenow Momentum goes to BIL.
+      GLD removed (not fixed income). Equity limited to broad and defensive ETFs.
+      Bond base weights tilted to short and intermediate duration, TLT capped at 3%.
 
-    What is from the source, and what is the implementation specification:
-      Source:         monthly rebalance | same holdings and weights as the base portfolio | Clenow Momentum =
-                      ((exp(slope)^252 - 1) * 100) * R^2 | weights scaled by momentum, at most halved or doubled | normalise.
-      Implementation: 90-day regression window (standard window from Stocks on the Move)
-                      base weights: 70% equity equal-weighted over 14 ETFs (5.0% each), 28% bonds equal-weighted over 7 ETFs (4.0% each), 2% BIL min cash reserve
-                      rank-to-multiplier map: percentile rank inside each sleeve, lowest 0.5x, highest 2.0x, log-linear
-                      equity band 50% to 65%: total equity share bounded within [50%, 65%] (nominal 70% base equity capped at 65% in neutral state)
+    Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025).
+    Clenow Momentum = ((exp(slope)^252 - 1) * 100) * R^2 on a 90-day log-price regression.
 
     Allocation at each monthly rebalance:
       1. Clenow Momentum per ETF on the last 90 closes.
-      2. Multiplier per ETF = 0.5 * (2.0 / 0.5) ^ r, r = 0..1 percentile rank inside its sleeve.
-      3. Weight = base weight * multiplier, normalised so risk assets sum to 98%; BIL = 2%.
-      4. Equity band: if the equity share leaves [50%, 65%], both sleeves are rescaled to the nearest bound.
-      5. Optional abs_gate (off by default): an ETF with negative Clenow Momentum goes to BIL, and the equity floor is relaxed.
+      2. Multiplier per ETF = m_min * (m_max / m_min) ^ r, r = 0..1 percentile rank inside its sleeve.
+      3. Weight = base weight * multiplier, normalised so risk assets sum to 95%; BIL = 5%.
+      4. Equity band: if the equity share leaves [20%, 35%], both sleeves are rescaled to the nearest bound.
+      5. abs_gate: negative Clenow Momentum goes to BIL, and the equity floor is relaxed.
     Between rebalances the strategy returns the current holdings (no trades).
 
-    Known limit: relative scaling alone gives no protection when everything falls together (2022 type markets),
-    because the normalisation cancels a uniform decline. abs_gate is the only defence here.
-
-    Guardrails (strategy fails closed and keeps holdings): sum <= 1, no negative weights, single ETF <= 25%,
-    equity inside the band (unless use_band is off or abs_gate relaxes the floor).
-    History: needs 100 bars. Missing data or history never raises: every skip is logged.
+    Guardrails (fail closed, keep holdings): sum <= 1, no negative weights, single ETF <= 25%,
+    equity inside the band (floor relaxed by abs_gate).
+    History: needs 100 bars. Missing data never raises: every skip is logged.
     """
-
 
     def __init__(self):
         # Universe
-        self.equity = ["VT", "IXN", "GSLC", "VIG", "XLV", "XLU", "XLP", "QQQ", "RSP", "EFA", "IJT"]
-        self.bonds = ["GLD", "AGG", "IEF", "BND", "TIP"]
+        self.equity = ["VT", "VIG", "GSLC", "RSP", "EFA", "XLV", "XLU", "XLP"]
+        self.bonds = ["SHY", "AGG", "BND", "IEF", "TIP", "TLT"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark only, always 0%
         self.trading = self.equity + self.bonds + [self.cash]
 
-        # Base (strategic) weights
-        self.base_equity = 0.50
-        self.base_bonds = 0.48
-        self.cash_min = 0.02
+        # Base (strategic) weights: 30 / 65 / 5
+        self.base_equity = 0.30
+        self.base_bonds = 0.65
+        self.cash_min = 0.05
 
         # Clenow Momentum and weight scaling
         self.mom_window = 90
-        self.m_min = 0.8
-        self.m_max = 3.0
+        self.m_min = 0.75
+        self.m_max = 1.33
 
         # Risk profile
-        self.use_band = False
-        self.e_floor = 0.5
-        self.e_ceil = 0.65
+        self.use_band = True
+        self.e_floor = 0.20
+        self.e_ceil = 0.35
         self.max_weight = 0.25
-        self.abs_gate = False
+        self.abs_gate = True
 
         # Monthly rebalance
         self.rebalance_months = 1
@@ -73,7 +67,8 @@ class TradingStrategy(Strategy):
         self.bars = 130
 
         self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({t: self.base_bonds / len(self.bonds) for t in self.bonds})
+        self.base.update({"SHY": 0.18, "AGG": 0.14, "BND": 0.14,
+                          "IEF": 0.10, "TIP": 0.06, "TLT": 0.03})  # sums to 0.65
 
     @property
     def assets(self):
@@ -152,7 +147,7 @@ class TradingStrategy(Strategy):
                 for t in self.bonds:
                     w[t] *= (risky - e2) / (risky - e)
 
-        # Optional absolute gate: negative Clenow Momentum goes to BIL
+        # Absolute gate: negative Clenow Momentum goes to BIL
         n_neg = sum(1 for t in scored if cm[t] < 0)
         if self.abs_gate:
             for t in scored:
