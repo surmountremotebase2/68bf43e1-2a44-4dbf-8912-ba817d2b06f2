@@ -45,8 +45,8 @@ class TradingStrategy(Strategy):
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights: 30 / 65 / 5
-        self.base_equity = 0.40
-        self.base_bonds = 0.55
+        self.base_equity = 0.50
+        self.base_bonds = 0.45
         self.cash_min = 0.05
 
         # Clenow Momentum and weight scaling
@@ -74,8 +74,8 @@ class TradingStrategy(Strategy):
         self.bars = 260
 
         self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({"SHY": 0.10, "AGG": 0.14, "BND": 0.15, "IEF": 0.03,
-                          "TIP": 0.04, "TLT": 0.03, "GLD": 0.06})  # sums to 0.55
+        self.base.update({"SHY": 0.10, "AGG": 0.14, "BND": 0.10, "IEF": 0.03,
+                          "TIP": 0.04, "TLT": 0.03, "GLD": 0.06})  # sums to 0.50
 
     @property
     def assets(self):
