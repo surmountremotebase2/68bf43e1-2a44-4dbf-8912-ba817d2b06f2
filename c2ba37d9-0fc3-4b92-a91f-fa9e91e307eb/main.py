@@ -45,14 +45,14 @@ class TradingStrategy(Strategy):
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights: 30 / 65 / 5
-        self.base_equity = 0.30
-        self.base_bonds = 0.65
+        self.base_equity = 0.40
+        self.base_bonds = 0.55
         self.cash_min = 0.05
 
         # Clenow Momentum and weight scaling
         self.mom_window = 90
         self.m_min = 0.75
-        self.m_max = 1.33
+        self.m_max = 1.2
 
         # Risk profile
         self.use_band = True
@@ -63,9 +63,9 @@ class TradingStrategy(Strategy):
 
         # Trend circuit breaker
         self.use_trend = True
-        self.trend_ticker = "VT"
+        self.trend_ticker = "SPY"
         self.trend_window = 200
-        self.trend_keep = 0.25   # share of the equity target kept while risk-off
+        self.trend_keep = 0.1   # share of the equity target kept while risk-off
 
         # Monthly rebalance
         self.rebalance_months = 1
@@ -74,8 +74,8 @@ class TradingStrategy(Strategy):
         self.bars = 260
 
         self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({"SHY": 0.12, "AGG": 0.14, "BND": 0.14, "IEF": 0.10,
-                          "TIP": 0.06, "TLT": 0.03, "GLD": 0.06})  # sums to 0.65
+        self.base.update({"SHY": 0.10, "AGG": 0.14, "BND": 0.15, "IEF": 0.03,
+                          "TIP": 0.04, "TLT": 0.03, "GLD": 0.06})  # sums to 0.55
 
     @property
     def assets(self):
