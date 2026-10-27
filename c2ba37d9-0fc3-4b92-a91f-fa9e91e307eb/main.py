@@ -8,16 +8,16 @@ import math
 class TradingStrategy(Strategy):
 
     """
-    Conservative Clenow-style dynamic tactical allocation: static strategic base weights, scaled monthly by Clenow Momentum.
+    Conservative Clenow-style dynamic tactical allocation with a trend circuit breaker.
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
 
     Risk profile: Conservative (capital preservation first, income second).
-      Base mix: 30% equity, 65% bonds, 5% BIL.
-      Equity band: 20% to 35%.
-      Momentum multiplier: 0.75x to 1.33x (narrow tilts).
-      abs_gate ON: an ETF with negative Clenow Momentum goes to BIL.
-      GLD removed (not fixed income). Equity limited to broad and defensive ETFs.
-      Bond base weights tilted to short and intermediate duration, TLT capped at 3%.
+      Base mix: 30% equity, 65% defensive (bonds + 6% gold), 5% BIL.
+      Equity band: 20% to 35%. Momentum multiplier 0.75x to 1.33x.
+      abs_gate ON: an ETF with negative Clenow Momentum goes to BIL (this is what limits 2022 type losses).
+      Trend circuit breaker: when VT closes below its 200-day average, equity is cut to 25% of its
+      target weight and the difference goes to BIL. Checked daily, acts only on the crossing day, and
+      is exempt from the equity floor. Back above the average, a fresh target is computed.
 
     Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025).
     Clenow Momentum = ((exp(slope)^252 - 1) * 100) * R^2 on a 90-day log-price regression.
@@ -27,18 +27,19 @@ class TradingStrategy(Strategy):
       2. Multiplier per ETF = m_min * (m_max / m_min) ^ r, r = 0..1 percentile rank inside its sleeve.
       3. Weight = base weight * multiplier, normalised so risk assets sum to 95%; BIL = 5%.
       4. Equity band: if the equity share leaves [20%, 35%], both sleeves are rescaled to the nearest bound.
-      5. abs_gate: negative Clenow Momentum goes to BIL, and the equity floor is relaxed.
-    Between rebalances the strategy returns the current holdings (no trades).
+      5. abs_gate: negative Clenow Momentum goes to BIL.
+      6. If the trend breaker is active, equity is cut (see above).
+    Between rebalances the strategy returns the current holdings, except on a trend crossing day.
 
     Guardrails (fail closed, keep holdings): sum <= 1, no negative weights, single ETF <= 25%,
-    equity inside the band (floor relaxed by abs_gate).
-    History: needs 100 bars. Missing data never raises: every skip is logged.
+    equity inside the band (floor relaxed by abs_gate and by the trend breaker).
+    History: needs 210 bars. Missing data never raises: every skip is logged.
     """
 
     def __init__(self):
         # Universe
         self.equity = ["VT", "VIG", "GSLC", "RSP", "EFA", "XLV", "XLU", "XLP"]
-        self.bonds = ["SHY", "AGG", "BND", "IEF", "TIP", "TLT"]
+        self.bonds = ["SHY", "AGG", "BND", "IEF", "TIP", "TLT", "GLD"]   # defensive sleeve, GLD is the 6% diversifier
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark only, always 0%
         self.trading = self.equity + self.bonds + [self.cash]
@@ -60,15 +61,21 @@ class TradingStrategy(Strategy):
         self.max_weight = 0.25
         self.abs_gate = True
 
+        # Trend circuit breaker
+        self.use_trend = True
+        self.trend_ticker = "VT"
+        self.trend_window = 200
+        self.trend_keep = 0.25   # share of the equity target kept while risk-off
+
         # Monthly rebalance
         self.rebalance_months = 1
 
-        self.min_bars = 100
-        self.bars = 130
+        self.min_bars = 210
+        self.bars = 260
 
         self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({"SHY": 0.18, "AGG": 0.14, "BND": 0.14,
-                          "IEF": 0.10, "TIP": 0.06, "TLT": 0.03})  # sums to 0.65
+        self.base.update({"SHY": 0.12, "AGG": 0.14, "BND": 0.14, "IEF": 0.10,
+                          "TIP": 0.06, "TLT": 0.03, "GLD": 0.06})  # sums to 0.65
 
     @property
     def assets(self):
@@ -109,6 +116,25 @@ class TradingStrategy(Strategy):
         ss_tot = float(((y - y.mean()) ** 2).sum())
         r2 = 1.0 - float(((y - (slope * x + intercept)) ** 2).sum()) / ss_tot if ss_tot > 0 else 0.0
         return (math.exp(slope) ** 252 - 1.0) * 100.0 * r2
+
+    def _risk_off(self, rows):
+        """True if the trend ticker closes below its trend_window average at the last bar. None if data is missing."""
+        n = self.trend_window
+        if len(rows) < n:
+            return None
+        c = [bar[self.trend_ticker]["close"] if self.trend_ticker in bar else float("nan") for bar in rows[-n:]]
+        if any(x != x for x in c):
+            return None
+        return c[-1] < sum(c) / n
+
+    def _derisk(self, w):
+        """Keep trend_keep of each equity weight, move the rest to BIL."""
+        out = dict(w)
+        cut = sum(out[t] for t in self.equity) * (1.0 - self.trend_keep)
+        for t in self.equity:
+            out[t] *= self.trend_keep
+        out[self.cash] += cut
+        return out
 
     def _target(self, df):
         """Target weights from data up to the current bar. Returns (weights dict or None, info dict)."""
@@ -159,12 +185,12 @@ class TradingStrategy(Strategy):
         tgt[self.cash] = max(0.0, 1.0 - sum(v for k, v in tgt.items() if k != self.cash) - 1e-9)
         return tgt, dict(equity=sum(w[t] for t in self.equity), n_neg=n_neg)
 
-    def _valid(self, w):
+    def _valid(self, w, relax=False):
         e = sum(w[c] for c in self.equity)
         ok = (sum(w.values()) <= 1.0 + 1e-9 and min(w.values()) >= -1e-12
               and max(v for k, v in w.items() if k != self.cash) <= self.max_weight + 1e-9)
         if self.use_band:
-            ok = ok and e <= self.e_ceil + 1e-9 and (self.abs_gate or e >= self.e_floor - 1e-9)
+            ok = ok and e <= self.e_ceil + 1e-9 and (self.abs_gate or relax or e >= self.e_floor - 1e-9)
         return ok
 
     def _alloc(self, w):
@@ -188,10 +214,18 @@ class TradingStrategy(Strategy):
         invested = sum(cur.values())
         stamp = self._stamp(ohlcv[-1])[:10]
 
+        off = self._risk_off(ohlcv) if self.use_trend else False
+        off_prev = self._risk_off(ohlcv[:-1]) if self.use_trend else False
+
         if invested < 0.5:
             reason = "initial"
         elif self._period(ohlcv[-1]) != self._period(ohlcv[-2]):
             reason = "scheduled"
+        elif self.use_trend and off is not None and off_prev is not None and off != off_prev:
+            if off:
+                log("%s|TREND_OFF|equity cut to %.2f of target" % (stamp, self.trend_keep))
+                return self._alloc(self._derisk(cur))
+            reason = "trend_on"
         else:
             return self._alloc(cur)  # between rebalances: keep current holdings, no trades
 
@@ -205,9 +239,14 @@ class TradingStrategy(Strategy):
         if not self._valid(tgt):
             log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s" % (stamp, reason))
             return fallback
+        if off:
+            tgt = self._derisk(tgt)
+            if not self._valid(tgt, relax=True):
+                log("%s|GUARDRAIL_BREACH_KEPT_PREVIOUS|%s_derisk" % (stamp, reason))
+                return fallback
 
         turn = sum(abs(tgt[a] - cur[a]) for a in self.trading) / 2.0
-        log("%s|%s|eq=%.3f|neg=%d|turn=%.3f|%s" % (
-            stamp, reason, info["equity"], info["n_neg"], turn,
+        log("%s|%s|eq=%.3f|neg=%d|off=%s|turn=%.3f|%s" % (
+            stamp, reason, info["equity"], info["n_neg"], off, turn,
             ",".join("%s:%.4f" % (k, v) for k, v in tgt.items() if v > 1e-9)))
         return self._alloc(tgt)
