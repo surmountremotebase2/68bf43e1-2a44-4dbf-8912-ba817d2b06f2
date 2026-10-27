@@ -43,24 +43,24 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         # Universe
-        self.equity = ["VT", "IXN", "GSLC", "VIG", "MTUM", "IMTM", "XLV", "XLU", "XLE", "XLP", "QQQ", "RSP", "EFA", "IJT"]
-        self.bonds = ["GLD", "SHY", "AGG", "IEF", "BND", "TIP", "TLT"]
+        self.equity = ["VT", "IXN", "GSLC", "VIG", "XLV", "XLU", "XLP", "QQQ", "RSP", "EFA", "IJT"]
+        self.bonds = ["GLD", "AGG", "IEF", "BND", "TIP"]
         self.cash = "BIL"
         self.benchmark = "SPY"   # benchmark only, always 0%
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights
-        self.base_equity = 0.28
-        self.base_bonds = 0.70
+        self.base_equity = 0.50
+        self.base_bonds = 0.48
         self.cash_min = 0.02
 
         # Clenow Momentum and weight scaling
         self.mom_window = 90
-        self.m_min = 0.5
-        self.m_max = 2.0
+        self.m_min = 0.8
+        self.m_max = 3.0
 
         # Risk profile
-        self.use_band = True
+        self.use_band = False
         self.e_floor = 0.5
         self.e_ceil = 0.65
         self.max_weight = 0.25
