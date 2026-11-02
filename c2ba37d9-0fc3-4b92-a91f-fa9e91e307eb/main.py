@@ -41,7 +41,6 @@ class TradingStrategy(Strategy):
         self.equity = ["VT", "IXN", "GSLC", "VIG", "MTUM", "IMTM", "XLV", "XLU", "XLE", "XLP", "QQQ", "RSP", "EFA", "IJT"]
         self.bonds = ["GLD", "SHY", "AGG", "IEF", "BND", "TIP", "TLT"]
         self.cash = "BIL"
-        #self.benchmark = "SPY"   # benchmark only, always 0%
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights: 50 / 50 base scaled to 95% risk + 5% cash
@@ -63,7 +62,7 @@ class TradingStrategy(Strategy):
 
         # Trend circuit breaker
         self.use_trend = True
-        self.trend_ticker = "SPY"
+        self.trend_ticker = "VT"
         self.trend_window = 200
         self.trend_keep = 0.10   # share of the equity target kept while risk-off (10% kept, 90% cut)
 
@@ -79,8 +78,8 @@ class TradingStrategy(Strategy):
 
     @property
     def assets(self):
-        #return self.trading + [self.benchmark]
-        return self.trading
+        return self.trading + [self.trend_ticker]
+        #return self.trading
 
     @property
     def interval(self):
