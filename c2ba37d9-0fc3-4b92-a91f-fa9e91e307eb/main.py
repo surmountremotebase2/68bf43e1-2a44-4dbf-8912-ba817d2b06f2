@@ -41,7 +41,7 @@ class TradingStrategy(Strategy):
         self.equity = ["VT", "IXN", "GSLC", "VIG", "MTUM", "IMTM", "XLV", "XLU", "XLE", "XLP", "QQQ", "RSP", "EFA", "IJT"]
         self.bonds = ["GLD", "SHY", "AGG", "IEF", "BND", "TIP", "TLT"]
         self.cash = "BIL"
-        self.benchmark = "SPY"   # benchmark only, always 0%
+        self.benchmark = "AOK"   # benchmark only, always 0%
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights: 50 / 50 base scaled to 95% risk + 5% cash
