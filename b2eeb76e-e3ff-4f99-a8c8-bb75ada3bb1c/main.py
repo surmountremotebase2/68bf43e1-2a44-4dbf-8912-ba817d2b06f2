@@ -46,7 +46,7 @@ class TradingStrategy(Strategy):
         self.equity = ["VT", "IXN", "GSLC", "VIG", "MTUM", "IMTM", "XLV", "XLU", "XLE", "XLP", "QQQ", "RSP", "EFA", "IJT"]
         self.bonds = ["GLD", "SHY", "AGG", "IEF", "BND", "TIP", "TLT"]
         self.cash = "BIL"
-        self.benchmark = "SPY"   # benchmark only, always 0%
+        
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights
@@ -77,7 +77,7 @@ class TradingStrategy(Strategy):
 
     @property
     def assets(self):
-        return self.trading + [self.benchmark]
+        return self.trading
 
     @property
     def interval(self):
@@ -174,7 +174,6 @@ class TradingStrategy(Strategy):
 
     def _alloc(self, w):
         out = {a: float(w.get(a, 0.0)) for a in self.trading}
-        out[self.benchmark] = 0.0
         total = sum(out.values())
         if total > 1.0:
             out = {k: v / total for k, v in out.items()}
