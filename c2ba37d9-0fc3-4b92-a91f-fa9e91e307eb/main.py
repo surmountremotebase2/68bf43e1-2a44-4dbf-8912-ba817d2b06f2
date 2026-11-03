@@ -12,7 +12,7 @@ class TradingStrategy(Strategy):
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
 
     Risk profile: Conservative (capital preservation first, income second).
-      Base mix: 50% equity, 50% defensive (bonds + 6% gold), scaled to 95% total risk + 5% BIL minimum cash.
+      Base mix: 0% equity, 50% defensive (bonds + 6% gold), scaled to 95% total risk + 5% BIL minimum cash.
       Equity band: 20% to 35%. Momentum multiplier 0.75x to 1.20x.
       abs_gate ON: an ETF with negative Clenow Momentum goes to BIL.
       Trend circuit breaker: when SPY closes below its 200-day average, equity is cut to 10% of its
