@@ -62,7 +62,7 @@ class TradingStrategy(Strategy):
 
         # Trend circuit breaker
         self.use_trend = True
-        self.trend_ticker = "VT"
+        self.trend_ticker = "SPY"
         self.trend_window = 200
         self.trend_keep = 0.10   # share of the equity target kept while risk-off (10% kept, 90% cut)
 
