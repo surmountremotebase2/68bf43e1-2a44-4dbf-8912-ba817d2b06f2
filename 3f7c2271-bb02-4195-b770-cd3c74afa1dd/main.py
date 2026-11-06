@@ -45,7 +45,7 @@ class TradingStrategy(Strategy):
 
         # Require sufficient observations for the lookback
         # and a valid previous observation.
-        if len(ohlcv) < self.lookback + 1:
+        if len(ohlcv) < 1:
             return TargetAllocation({})
 
         # Determine the current position in the trading-session
