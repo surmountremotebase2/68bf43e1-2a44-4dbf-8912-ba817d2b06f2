@@ -20,11 +20,11 @@ class TradingStrategy(Strategy):
     def __init__(self):
         self.tickers = [
             "SPY", "RSP", "QQQ", "XLV", "XLF", "GLD",
-            "DBC", "IJT", "IEF", "TLT", "BND", "SHY"
+            "DBC", "IJT", "IEF", "TLT", "BND", "SHY", "AGG"
         ]
 
         self.lookback = 175
-        self.sma_period = 200
+        self.sma_period = 100
         self.top_n = 3
         self.rebalance_period = 21
 
