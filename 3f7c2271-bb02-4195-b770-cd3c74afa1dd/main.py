@@ -5,24 +5,27 @@ from surmount.base_class import Strategy, TargetAllocation
 
 class TradingStrategy(Strategy):
     """
-    Monthly Relative Strength Rotation
-
-    Universe:
-        SPY, EEM, TLT
+    Monthly Relative Strength Rotation with 200-day SMA Filter
 
     Method:
         - Daily data (1day).
         - Rebalance every 21 trading sessions.
-        - Rank ETFs by their trailing 21-session return.
-        - Allocate 100% to the strongest ETF.
-        - Maintain the selected allocation between rebalances.
-
-    No timestamp field required.
+        - Rank ETFs by trailing 175-session return.
+        - Select the top 3 ETFs.
+        - Exclude selected ETFs trading below their 200-day SMA.
+        - Equally weight the remaining eligible ETFs.
+        - Maintain allocations between rebalances.
     """
 
     def __init__(self):
-        self.tickers = ["SPY", "RSP", "QQQ", "XLV", "XLF", "GLD", "DBC", "IJT", "IEF", "TLT", "BND", "SHY"]
+        self.tickers = [
+            "SPY", "RSP", "QQQ", "XLV", "XLF", "GLD",
+            "DBC", "IJT", "IEF", "TLT", "BND", "SHY"
+        ]
+
         self.lookback = 175
+        self.sma_period = 200
+        self.top_n = 3
         self.rebalance_period = 21
 
     @property
@@ -40,71 +43,112 @@ class TradingStrategy(Strategy):
     def run(self, data):
 
         ohlcv = data.get("ohlcv", [])
-
         current_index = len(ohlcv) - 1
 
-        # Need enough history to calculate the first
-        # 21-session return.
-        if current_index < self.lookback:
+        # Require sufficient history for both momentum and SMA.
+        required_history = max(
+            self.lookback + 1,
+            self.sma_period
+        )
+
+        if current_index < required_history - 1:
             return TargetAllocation({})
 
-        # Find the most recent scheduled rebalance index.
+        # Most recent scheduled rebalance point.
         rebalance_index = (
             current_index -
             (current_index % self.rebalance_period)
         )
 
-        # Calculate momentum using prices available at
-        # the most recent rebalance point.
-        start_index = rebalance_index - self.lookback
+        momentum_start_index = (
+            rebalance_index - self.lookback
+        )
 
-        if start_index < 0:
+        sma_start_index = (
+            rebalance_index - self.sma_period + 1
+        )
+
+        if momentum_start_index < 0 or sma_start_index < 0:
             return TargetAllocation({})
 
         performance = {}
+        above_sma = {}
 
         for ticker in self.tickers:
 
             try:
                 start_close = float(
-                    ohlcv[start_index][ticker]["close"]
+                    ohlcv[momentum_start_index][ticker]["close"]
                 )
 
-                end_close = float(
+                current_close = float(
                     ohlcv[rebalance_index][ticker]["close"]
                 )
 
+                sma_closes = [
+                    float(ohlcv[i][ticker]["close"])
+                    for i in range(
+                        sma_start_index,
+                        rebalance_index + 1
+                    )
+                ]
+
                 if (
                     not math.isfinite(start_close)
-                    or not math.isfinite(end_close)
+                    or not math.isfinite(current_close)
                     or start_close <= 0
-                    or end_close <= 0
+                    or current_close <= 0
+                    or len(sma_closes) != self.sma_period
+                    or not all(math.isfinite(p) and p > 0
+                               for p in sma_closes)
                 ):
                     continue
 
+                # Trailing 175-session momentum.
                 performance[ticker] = (
-                    end_close / start_close
+                    current_close / start_close
                 ) - 1.0
 
-            except (KeyError, TypeError, ValueError):
+                # 200-day simple moving average.
+                sma_200 = sum(sma_closes) / self.sma_period
+
+                above_sma[ticker] = current_close >= sma_200
+
+            except (KeyError, IndexError, TypeError, ValueError):
                 continue
 
-        # Require valid prices for the entire universe.
-        if len(performance) != len(self.tickers):
+        # Need valid momentum and SMA data.
+        if not performance:
             return TargetAllocation({})
 
-        # Determine the strongest ETF at the last rebalance.
-        best_performer = max(
-            self.tickers,
-            key=lambda ticker: performance[ticker]
+        # Rank the entire available universe by momentum.
+        ranked_etfs = sorted(
+            performance.keys(),
+            key=lambda ticker: performance[ticker],
+            reverse=True
         )
 
-        # IMPORTANT:
-        # Return the same target allocation on every daily
-        # execution until the next scheduled rebalance.
+        # Select the top 3 before applying the trend filter.
+        top_candidates = ranked_etfs[:self.top_n]
+
+        # Exclude ETFs below their 200-day SMA.
+        eligible_etfs = [
+            ticker
+            for ticker in top_candidates
+            if above_sma.get(ticker, False)
+        ]
+
+        # Default to zero allocation for every ETF.
         allocation = {
-            ticker: 1.0 if ticker == best_performer else 0.0
+            ticker: 0.0
             for ticker in self.tickers
         }
+
+        # Equal-weight the surviving ETFs.
+        if eligible_etfs:
+            weight = 1.0 / len(eligible_etfs)
+
+            for ticker in eligible_etfs:
+                allocation[ticker] = weight
 
         return TargetAllocation(allocation)
