@@ -1,61 +1,30 @@
 import math
-import pandas as pd
-import pandas_ta as ta
 
 from surmount.base_class import Strategy, TargetAllocation
-from surmount.logging import log
 
 
 class TradingStrategy(Strategy):
     """
-    Daily ADX Directional Movement ETF Rotation.
+    Monthly Relative Strength Rotation
 
-    Rules:
-      1. +DI > -DI: ETF is in a bullish directional regime.
-      2. +DI < -DI: ETF is excluded.
-      3. Rank eligible ETFs by highest +DI.
-      4. Allocate equally to the top 5 ETFs.
+    Universe:
+        SPY - US Equities
+        EEM - Emerging Markets Equities
+        TLT - US Long-Term Treasury Bonds
 
-    Optional:
-      MIN_ADX = None: Pure DI crossover strategy.
-      MIN_ADX = 20: Require minimum ADX trend strength.
+    Strategy:
+        1. Calculate each ETF's previous-month return.
+        2. Rank the ETFs by monthly performance.
+        3. Allocate 100% to the best-performing ETF.
+        4. Repeat monthly, retaining the same ETF if it remains
+           the strongest performer.
+
+    Rebalancing:
+        Monthly, using completed monthly candles only.
     """
 
-    ADX_LENGTH = 14
-    TOP_N = 5
-    MIN_ADX = None
-
     def __init__(self):
-        self.tickers = [
-            # US broad / size / style
-            "SPY", "QQQ", "DIA", "IWM", "MDY", "IJR",
-            "IJH", "VTI", "RSP", "IWD", "IWF", "VTV",
-
-            # SPDR sectors
-            "XLB", "XLE", "XLF", "XLI", "XLK", "XLP",
-            "XLU", "XLV", "XLY", "XLC", "XLRE",
-
-            # Industries
-            "SMH", "XBI", "IBB", "KRE", "XRT", "XHB",
-            "OIH", "XOP", "ITA", "IGV", "XME", "IYR",
-
-            # International developed
-            "EFA", "EWJ", "EWG", "EWU", "EWQ",
-            "EWA", "EWC", "EWL", "VGK",
-
-            # Emerging markets
-            "EEM", "EWZ", "FXI", "EWY", "EWT",
-            "INDA", "EWW", "EZA",
-
-            # Bonds
-            "TLT", "IEF", "SHY", "AGG", "LQD", "HYG",
-            "TIP", "MUB", "EMB", "IEI", "MBB",
-
-            # Commodities, FX and other
-            "GLD", "SLV", "USO", "UNG", "DBC", "DBA",
-            "UUP", "GDX", "FXE", "FXY", "GDXJ", "VNQ",
-            "DBB", "SCHD",
-        ]
+        self.tickers = ["SPY", "EEM", "TLT", "QQQ", "IEF", "BIL"]
 
     @property
     def assets(self):
@@ -63,158 +32,69 @@ class TradingStrategy(Strategy):
 
     @property
     def interval(self):
-        return "1day"
+        return "1month"
 
     @property
     def data(self):
         return []
 
-    def calculate_directional_indicators(self, ticker, ohlcv):
-        """
-        Calculate +DI, -DI and ADX using Wilder's smoothing
-        through pandas_ta.
-
-        Returns the latest indicator values or None.
-        """
-
-        high = []
-        low = []
-        close = []
-
-        for bar in ohlcv:
-            if ticker not in bar:
-                continue
-
-            candle = bar[ticker]
-
-            try:
-                h = float(candle["high"])
-                l = float(candle["low"])
-                c = float(candle["close"])
-
-                if not all(math.isfinite(v) for v in (h, l, c)):
-                    continue
-
-                high.append(h)
-                low.append(l)
-                close.append(c)
-
-            except (KeyError, TypeError, ValueError):
-                continue
-
-        length = self.ADX_LENGTH
-
-        # ADX requires additional observations for initialization.
-        if len(close) < 2 * length:
-            return None
-
-        high_series = pd.Series(high, dtype=float)
-        low_series = pd.Series(low, dtype=float)
-        close_series = pd.Series(close, dtype=float)
-
-        try:
-            indicators = ta.adx(
-                high=high_series,
-                low=low_series,
-                close=close_series,
-                length=length
-            )
-
-            if indicators is None or indicators.empty:
-                return None
-
-            plus_di = indicators["DMP_" + str(length)].iloc[-1]
-            minus_di = indicators["DMN_" + str(length)].iloc[-1]
-            adx = indicators["ADX_" + str(length)].iloc[-1]
-
-            if pd.isna(plus_di) or pd.isna(minus_di) or pd.isna(adx):
-                return None
-
-            return {
-                "plus_di": float(plus_di),
-                "minus_di": float(minus_di),
-                "adx": float(adx)
-            }
-
-        except (KeyError, ValueError, TypeError, IndexError) as e:
-            log("Indicator calculation failed for {}: {}".format(
-                ticker, str(e)
-            ))
-            return None
-
     def run(self, data):
 
         ohlcv = data.get("ohlcv", [])
 
-        if not ohlcv:
+        # At least two completed monthly candles are required
+        # to calculate the previous month's return.
+        if len(ohlcv) < 2:
             return TargetAllocation({})
 
-        eligible = []
+        performance = {}
 
-        # Evaluate all ETFs independently.
         for ticker in self.tickers:
 
-            indicators = self.calculate_directional_indicators(
-                ticker, ohlcv
-            )
+            try:
+                previous_close = float(
+                    ohlcv[-2][ticker]["close"]
+                )
 
-            if indicators is None:
+                latest_close = float(
+                    ohlcv[-1][ticker]["close"]
+                )
+
+                # Validate prices before calculating returns.
+                if (
+                    not math.isfinite(previous_close)
+                    or not math.isfinite(latest_close)
+                    or previous_close <= 0
+                    or latest_close <= 0
+                ):
+                    continue
+
+                # Previous month's close-to-close return.
+                monthly_return = (
+                    latest_close / previous_close
+                ) - 1.0
+
+                performance[ticker] = monthly_return
+
+            except (KeyError, TypeError, ValueError):
                 continue
 
-            plus_di = indicators["plus_di"]
-            minus_di = indicators["minus_di"]
-            adx = indicators["adx"]
-
-            # Entry / exit regime:
-            # +DI above -DI means the latest directional crossover
-            # regime is bullish. Below means exit.
-            if plus_di <= minus_di:
-                continue
-
-            # Optional ADX trend-strength filter.
-            if self.MIN_ADX is not None and adx < self.MIN_ADX:
-                continue
-
-            eligible.append({
-                "ticker": ticker,
-                "plus_di": plus_di,
-                "minus_di": minus_di,
-                "adx": adx
-            })
-
-        # No bullish ETFs: remain fully in cash.
-        if not eligible:
-            log("ADX strategy: No eligible ETFs.")
+        # Do not trade if complete data is unavailable
+        # for any asset in the investment universe.
+        if len(performance) != len(self.tickers):
             return TargetAllocation({})
 
-        # Rank by strongest positive directional movement.
-        eligible.sort(
-            key=lambda x: x["plus_di"],
-            reverse=True
+        # Rank by monthly performance, highest first.
+        # Ticker order provides deterministic tie-breaking.
+        best_performer = max(
+            self.tickers,
+            key=lambda ticker: performance[ticker]
         )
 
-        # Select the strongest five.
-        selected = eligible[:self.TOP_N]
-
-        # Equal-weight allocation.
-        weight = 1.0 / len(selected)
-
+        # Fully invested in the monthly relative-strength leader.
         allocation = {
-            item["ticker"]: weight
-            for item in selected
+            ticker: 1.0 if ticker == best_performer else 0.0
+            for ticker in self.tickers
         }
-
-        log(
-            "ADX selected ETFs: {}".format(
-                [
-                    (
-                        x["ticker"],
-                        round(x["plus_di"], 2),
-                        round(x["adx"], 2)
-                    )
-                    for x in selected
-                ]
-            )
-        )
 
         return TargetAllocation(allocation)
