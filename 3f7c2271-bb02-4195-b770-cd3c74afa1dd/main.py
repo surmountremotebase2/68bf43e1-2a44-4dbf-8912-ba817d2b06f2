@@ -8,18 +8,16 @@ class TradingStrategy(Strategy):
     Monthly Relative Strength Rotation
 
     Universe:
-        SPY - US Equities
-        EEM - Emerging Markets Equities
-        TLT - Long-Term US Treasury Bonds
+        SPY, EEM, TLT
 
     Method:
-        - Uses daily OHLCV data.
-        - Calculates trailing 21-trading-session performance.
-        - Selects the ETF with the highest return.
-        - Holds the selected ETF for approximately one month.
-        - Re-evaluates after each 21-session holding period.
+        - Daily data (1day).
+        - Rebalance every 21 trading sessions.
+        - Rank ETFs by their trailing 21-session return.
+        - Allocate 100% to the strongest ETF.
+        - Maintain the selected allocation between rebalances.
 
-    No timestamp field is required.
+    No timestamp field required.
     """
 
     def __init__(self):
@@ -43,61 +41,69 @@ class TradingStrategy(Strategy):
 
         ohlcv = data.get("ohlcv", [])
 
-        # Require sufficient observations for the lookback
-        # and a valid previous observation.
-        if len(ohlcv) < 1:
-            return TargetAllocation({})
-
-        # Determine the current position in the trading-session
-        # sequence. Rebalance once every 21 observations.
         current_index = len(ohlcv) - 1
 
-        if current_index % self.rebalance_period != 0:
+        # Need enough history to calculate the first
+        # 21-session return.
+        if current_index < self.lookback:
+            return TargetAllocation({})
+
+        # Find the most recent scheduled rebalance index.
+        rebalance_index = (
+            current_index -
+            (current_index % self.rebalance_period)
+        )
+
+        # Calculate momentum using prices available at
+        # the most recent rebalance point.
+        start_index = rebalance_index - self.lookback
+
+        if start_index < 0:
             return TargetAllocation({})
 
         performance = {}
 
-        # Calculate trailing 21-session returns.
         for ticker in self.tickers:
+
             try:
-                current_close = float(
-                    ohlcv[-1][ticker]["close"]
+                start_close = float(
+                    ohlcv[start_index][ticker]["close"]
                 )
 
-                previous_close = float(
-                    ohlcv[-(self.lookback + 1)][ticker]["close"]
+                end_close = float(
+                    ohlcv[rebalance_index][ticker]["close"]
                 )
 
                 if (
-                    not math.isfinite(current_close)
-                    or not math.isfinite(previous_close)
-                    or current_close <= 0
-                    or previous_close <= 0
+                    not math.isfinite(start_close)
+                    or not math.isfinite(end_close)
+                    or start_close <= 0
+                    or end_close <= 0
                 ):
                     continue
 
                 performance[ticker] = (
-                    current_close / previous_close
+                    end_close / start_close
                 ) - 1.0
 
             except (KeyError, TypeError, ValueError):
                 continue
 
-        # Avoid making a decision with incomplete universe data.
+        # Require valid prices for the entire universe.
         if len(performance) != len(self.tickers):
             return TargetAllocation({})
 
-        # Select the strongest ETF.
+        # Determine the strongest ETF at the last rebalance.
         best_performer = max(
             self.tickers,
             key=lambda ticker: performance[ticker]
         )
 
-        # Allocate 100% to the winner.
+        # IMPORTANT:
+        # Return the same target allocation on every daily
+        # execution until the next scheduled rebalance.
         allocation = {
-            ticker: (
-                1.0 if ticker == best_performer else 0.0
-            )
+            ticker: 1.0 if ticker == best_performer else 0.0
             for ticker in self.tickers
         }
 
