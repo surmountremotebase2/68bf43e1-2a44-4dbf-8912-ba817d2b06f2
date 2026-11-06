@@ -22,7 +22,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         self.tickers = ["SPY", "EEM", "TLT"]
-        self.lookback = 21
+        self.lookback = 126
         self.rebalance_period = 21
 
     @property
