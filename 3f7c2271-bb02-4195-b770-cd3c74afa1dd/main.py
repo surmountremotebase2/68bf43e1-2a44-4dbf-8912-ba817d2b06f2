@@ -24,7 +24,7 @@ class TradingStrategy(Strategy):
         ]
 
         self.lookback = 175
-        self.sma_period = 100
+        self.sma_period = 120
         self.top_n = 6
         self.rebalance_period = 5
 
