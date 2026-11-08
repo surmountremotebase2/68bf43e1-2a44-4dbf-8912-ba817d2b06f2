@@ -25,7 +25,7 @@ class TradingStrategy(Strategy):
 
         self.lookback = 175
         self.sma_period = 110
-        self.top_n = 6
+        self.top_n = 4
         self.rebalance_period = 5
 
     @property
