@@ -20,7 +20,7 @@ class TradingStrategy(Strategy):
     def __init__(self):
         self.tickers = [
             "SPY", "RSP", "QQQ", "FEZ", "VXUS", "VPL", "GLD", "FXU", "BTAL", "XLV", "XLF", 
-            "DBC", "IJT", "IEF", "TLT", "BND", "SHY", "TIP", "UUP", "MTUM", "VBR", "IWD"
+            "IJT", "IEF", "TLT", "BND", "SHY", "TIP", "UUP", "MTUM", "VBR", "IWD"
         ]
 
         self.lookback = 175
