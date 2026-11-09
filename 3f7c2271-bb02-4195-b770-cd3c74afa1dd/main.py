@@ -19,7 +19,7 @@ class TradingStrategy(Strategy):
 
     def __init__(self):
         self.tickers = [
-            "SPY", "RSP", "QQQ", "XLF", "FEZ", "VXUS", "VPL", "GLD", "FXU", "BTAL"
+            "SPY", "RSP", "QQQ", "XLF", "FEZ", "VXUS", "VPL", "GLD", "FXU", "BTAL", 
             "DBC", "IJT", "IEF", "TLT", "BND", "SHY", "TIP", "UUP", "MTUM", "VBR", "IWD"
         ]
 
