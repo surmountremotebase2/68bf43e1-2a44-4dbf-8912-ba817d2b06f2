@@ -28,7 +28,7 @@ class TradingStrategy(Strategy):
         lookback = 400
 
         # Ensure we have enough data to calculate EMA
-        if len(ohlcv) < lookback:
+        if len(ohlcv) < 1:
             return TargetAllocation({})
 
         # Extract closing prices
