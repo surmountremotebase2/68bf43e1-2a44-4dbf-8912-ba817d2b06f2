@@ -25,7 +25,7 @@ class TradingStrategy(Strategy):
     def run(self, data):
         ohlcv = data["ohlcv"]
 
-        lookback = 400
+        lookback = 50
 
         # Ensure we have enough data to calculate EMA
         if len(ohlcv) < 1:
