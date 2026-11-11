@@ -26,7 +26,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         lookback = 50
-        long_sma = 50
+        long_sma = 300
 
         # Ensure we have enough data to calculate EMA
         if len(ohlcv) < lookback:
