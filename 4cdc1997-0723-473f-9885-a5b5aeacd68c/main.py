@@ -39,8 +39,11 @@ class TradingStrategy(Strategy):
         qqq_gld_ratio = qqq_close / gld_close
 
         # 2. Calculate the EMA for the ratio
-        qqq_sma = ta.sma(qqq_close, length=100).tolist()[-1]
-        gld_sma = ta.sma(gld_close, length=100).tolist()[-1]
+        qqq_sma = 0
+        gld_sma = 0
+        if len(qqq_close) > 100:
+            qqq_sma = ta.sma(qqq_close, length=100).tolist()[-1]
+            gld_sma = ta.sma(gld_close, length=100).tolist()[-1]
         qqq_gld_ema50 = ta.sma(qqq_gld_ratio, length=lookback).tolist()
         qqq_gld_ema5 = ta.ema(qqq_gld_ratio, length=5).tolist()
         #current_ratio = spy_gld_ratio.tolist()[-1]
