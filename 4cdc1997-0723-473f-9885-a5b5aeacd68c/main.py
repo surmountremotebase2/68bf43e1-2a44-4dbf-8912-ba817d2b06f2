@@ -6,7 +6,7 @@ import pandas_ta as ta
 class TradingStrategy(Strategy):
     def __init__(self):
         # We only need SPY and GLD for this rotation strategy
-        self.tickers = ["GLD", "QQQ"]
+        self.tickers = ["GLD", "QQQ", "RSP"]
         self.data_list = []
 
     @property
@@ -33,7 +33,7 @@ class TradingStrategy(Strategy):
             return TargetAllocation({})
 
         # Extract closing prices
-        qqq_close = pd.Series([x["QQQ"]["close"] for x in ohlcv])
+        qqq_close = pd.Series([x["RSP"]["close"] for x in ohlcv])
         gld_close = pd.Series([x["GLD"]["close"] for x in ohlcv])
 
         # 1. Calculate the SPY/GLD ratio
@@ -41,9 +41,9 @@ class TradingStrategy(Strategy):
 
         # 2. Calculate the 20-month (420-day) EMA for the ratio
         qqq_gld_ema50 = ta.sma(qqq_gld_ratio, length=lookback).tolist()
-        qqq_gld_ema3 = ta.ema(qqq_gld_ratio, length=5).tolist()
+        qqq_gld_ema5 = ta.ema(qqq_gld_ratio, length=5).tolist()
         #current_ratio = spy_gld_ratio.tolist()[-1]
-        current_ratio = qqq_gld_ema3[-1]
+        current_ratio = qqq_gld_ema5[-1]
         current_ema = qqq_gld_ema50[-1]
 
         # Initialize base weights
