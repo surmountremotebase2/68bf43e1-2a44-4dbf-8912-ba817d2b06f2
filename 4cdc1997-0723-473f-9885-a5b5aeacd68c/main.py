@@ -49,8 +49,8 @@ class TradingStrategy(Strategy):
         #current_ratio = spy_gld_ratio.tolist()[-1]
         current_ratio = qqq_gld_ema5[-1]
         current_ema = qqq_gld_ema50[-1]
-        qqq_close_today = qqq_close[-1]
-        gld_close_today = gld_close[-1]
+        qqq_close_today = qqq_close.iloc[-1]
+        gld_close_today = gld_close.iloc[-1]
 
         # Initialize base weights
         qqq_weight = 0.0
