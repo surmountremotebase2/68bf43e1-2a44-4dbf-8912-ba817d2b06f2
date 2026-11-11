@@ -6,7 +6,7 @@ import pandas_ta as ta
 class TradingStrategy(Strategy):
     def __init__(self):
         # We only need SPY and GLD for this rotation strategy
-        self.tickers = ["GLD", "QQQ", "SPY"]
+        self.tickers = ["GLD", "QQQ"]
         self.data_list = []
 
     @property
@@ -25,21 +25,20 @@ class TradingStrategy(Strategy):
     def run(self, data):
         ohlcv = data["ohlcv"]
 
-        # 20 months is approximately 420 trading days (20 * ~21 days/month)
         lookback = 50
 
-        # Ensure we have enough data to calculate a 420-period EMA
+        # Ensure we have enough data to calculate EMA
         if len(ohlcv) < lookback:
             return TargetAllocation({})
 
         # Extract closing prices
-        qqq_close = pd.Series([x["SPY"]["close"] for x in ohlcv])
+        qqq_close = pd.Series([x["QQQ"]["close"] for x in ohlcv])
         gld_close = pd.Series([x["GLD"]["close"] for x in ohlcv])
 
         # 1. Calculate the SPY/GLD ratio
         qqq_gld_ratio = qqq_close / gld_close
 
-        # 2. Calculate the 20-month (420-day) EMA for the ratio
+        # 2. Calculate the EMA for the ratio
         qqq_gld_ema50 = ta.sma(qqq_gld_ratio, length=lookback).tolist()
         qqq_gld_ema5 = ta.ema(qqq_gld_ratio, length=5).tolist()
         #current_ratio = spy_gld_ratio.tolist()[-1]
@@ -51,7 +50,7 @@ class TradingStrategy(Strategy):
         gld_weight = 0.0
 
         # 3. Apply the rotation logic
-        # If the ratio is above its 20-month EMA, we are in a Risk-On regime (Buy SPY)
+        # If the ratio is above its EMA, we are in a Risk-On regime (Buy QQQ)
         # Otherwise, Risk-Off regime (Buy GLD)
         if current_ratio > current_ema:
             qqq_weight = 1.0
@@ -59,7 +58,7 @@ class TradingStrategy(Strategy):
             gld_weight = 1.0
 
         # Log the current state for backtesting transparency
-        #log(f"SPY/GLD Ratio: {current_ratio:.4f} | 20M EMA: {current_ema:.4f} -> Allocating SPY: {spy_weight}, GLD: {gld_weight}")
+        #log(f"QQQ/GLD Ratio: {current_ratio:.4f} | EMA: {current_ema:.4f} -> Allocating QQQ: {qqq_weight}, GLD: {gld_weight}")
 
         return TargetAllocation({
             "QQQ": qqq_weight,
