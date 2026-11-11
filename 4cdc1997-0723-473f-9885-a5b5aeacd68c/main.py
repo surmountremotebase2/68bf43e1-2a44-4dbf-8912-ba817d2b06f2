@@ -26,6 +26,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         lookback = 50
+        long_sma = 200
 
         # Ensure we have enough data to calculate EMA
         if len(ohlcv) < lookback:
@@ -41,9 +42,9 @@ class TradingStrategy(Strategy):
         # 2. Calculate the EMA for the ratio
         qqq_sma = 0
         gld_sma = 0
-        if len(qqq_close) > 100:
-            qqq_sma = ta.sma(qqq_close, length=100).tolist()[-1]
-            gld_sma = ta.sma(gld_close, length=100).tolist()[-1]
+        if len(qqq_close) > long_sma:
+            qqq_sma = ta.sma(qqq_close, length=long_sma).tolist()[-1]
+            gld_sma = ta.sma(gld_close, length=long_sma).tolist()[-1]
         qqq_gld_ema50 = ta.sma(qqq_gld_ratio, length=lookback).tolist()
         qqq_gld_ema5 = ta.ema(qqq_gld_ratio, length=5).tolist()
         #current_ratio = spy_gld_ratio.tolist()[-1]
