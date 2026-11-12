@@ -23,9 +23,9 @@ class TradingStrategy(Strategy):
             "IJT", "IEF", "TLT", "BND", "SHY", "TIP", "UUP", "MTUM", "VBR", "IWD"
         ]
 
-        #self.lookback = 175
-        self.lookback = 21*10
-        self.sma_period = 110
+        self.lookback = 175
+        
+        self.sma_period = 150
         self.top_n = 3
         self.rebalance_period = 5
 
