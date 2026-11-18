@@ -60,9 +60,6 @@ class TradingStrategy(Strategy):
         qqq_close_today = qqq_close.iloc[-1]
         gld_close_today = gld_close.iloc[-1]
 
-        if pd.isna([qqq_sma, gld_sma, current_ratio_ema5, current_ratio_sma50]).any():
-            return TargetAllocation({"QQQ": 0.0, "GLD": 0.0, "BIL": 1.0})
-
         # Initialize mutually exclusive target weights (100% single-asset allocation)
         qqq_weight = 0.0
         gld_weight = 0.0
