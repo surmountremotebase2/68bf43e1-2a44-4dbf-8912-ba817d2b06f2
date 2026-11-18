@@ -53,14 +53,6 @@ class TradingStrategy(Strategy):
         ratio_sma50_series = ta.sma(qqq_gld_ratio, length=ratio_slow_sma)
         ratio_ema5_series = ta.ema(qqq_gld_ratio, length=ratio_fast_ema)
 
-        if (
-            qqq_sma_series is None
-            or gld_sma_series is None
-            or ratio_sma50_series is None
-            or ratio_ema5_series is None
-        ):
-            return TargetAllocation({"QQQ": 0.0, "GLD": 0.0, "BIL": 1.0})
-
         qqq_sma = qqq_sma_series.iloc[-1]
         gld_sma = gld_sma_series.iloc[-1]
         current_ratio_ema5 = ratio_ema5_series.iloc[-1]
@@ -68,7 +60,7 @@ class TradingStrategy(Strategy):
         qqq_close_today = qqq_close.iloc[-1]
         gld_close_today = gld_close.iloc[-1]
 
-        if pd.isna([qqq_sma, gld_sma, current_ratio_ema5, current_ratio_sma50]).any():
+        if [qqq_sma, gld_sma, current_ratio_ema5, current_ratio_sma50]).any():
             return TargetAllocation({"QQQ": 0.0, "GLD": 0.0, "BIL": 1.0})
 
         # Initialize mutually exclusive target weights (100% single-asset allocation)
