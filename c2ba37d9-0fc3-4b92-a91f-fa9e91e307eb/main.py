@@ -8,29 +8,22 @@ import math
 class TradingStrategy(Strategy):
 
     """
-    Conservative Clenow-style dynamic tactical allocation with a trend circuit breaker.
+    Ultra-Conservative Clenow-style dynamic tactical allocation with volatility targeting
+    and a hysteresis-buffered trend circuit breaker.
     Long only, no leverage, daily bars, always invested (BIL is the cash holding).
 
-    Risk profile: Conservative (capital preservation first, income second).
-      Equity band: 20% to 35%. Momentum multiplier 0.75x to 1.20x.
+    Risk profile: Capital preservation first (target 10y risk score 1.0 - 1.5).
+      Equity band: 12% to 22%. Minimum cash buffer: 20% BIL.
+      Momentum multiplier: 0.75x to 1.20x combined with 60-day inverse-volatility tilt.
+      Portfolio volatility cap: ex-ante annualized volatility capped at 3.2% via BIL scaling.
       abs_gate ON: an ETF with negative Clenow Momentum goes to BIL.
-      Trend circuit breaker: when SPY closes below its 200-day average, equity is cut to 10% of its
-      target weight and the difference goes to BIL. Checked daily, acts on the crossing day, and
-      is exempt from the equity floor. Back above the average, a fresh target is computed.
+      Trend circuit breaker: when SPY closes >0.5% below its 200-day average, equity is cut to 0%
+      and moved to BIL; re-enters when SPY closes >0.5% above its 200-day average.
 
     Source: Andreas Clenow, "Technical Asset Allocation" (CMT Association, 2025).
     Clenow Momentum = ((exp(slope)^252 - 1) * 100) * R^2 on a 90-day log-price regression.
 
-    Allocation at each monthly rebalance:
-      1. Clenow Momentum per ETF on the last 90 closes.
-      2. Multiplier per ETF = m_min * (m_max / m_min) ^ r, r = 0..1 percentile rank inside its sleeve.
-      3. Weight = base weight * multiplier, normalised so risk assets sum to 95%; BIL = 5%.
-      4. Equity band: if the equity share leaves [20%, 35%], both sleeves are rescaled to the nearest bound.
-      5. abs_gate: negative Clenow Momentum goes to BIL.
-      6. If the trend breaker is active, equity is cut to 10% of target (see above).
-    Between rebalances the strategy returns the current holdings, except on a trend crossing day.
-
-    Guardrails (fail closed, keep holdings): sum <= 1, no negative weights, single ETF <= 25%,
+    Guardrails (fail closed, keep holdings): sum <= 1, no negative weights, single ETF <= 15%,
     equity inside the band (floor relaxed by abs_gate and by the trend breaker).
     History: needs 210 bars. Missing data never raises: every skip is logged.
     """
@@ -42,28 +35,31 @@ class TradingStrategy(Strategy):
         self.cash = "BIL"
         self.trading = self.equity + self.bonds + [self.cash]
 
-        # Base (strategic) weights: 50 / 50 base scaled to 95% risk + 5% cash
-        self.base_equity = 0.40
-        self.base_bonds = 0.55
-        self.cash_min = 0.05
+        # Base (strategic) weights: 32% equity / 48% defensive / 20% minimum cash
+        self.base_equity = 0.32
+        self.base_bonds = 0.48
+        self.cash_min = 0.20
 
-        # Clenow Momentum and weight scaling
+        # Clenow Momentum, inverse-volatility tilt, and portfolio volatility target
         self.mom_window = 90
+        self.vol_window = 60
         self.m_min = 0.75
         self.m_max = 1.20
+        self.target_vol = 0.032  # 3.2% annualized ex-ante volatility cap
 
         # Risk profile
         self.use_band = True
-        self.e_floor = 0.20
-        self.e_ceil = 0.35
-        self.max_weight = 0.25
+        self.e_floor = 0.12
+        self.e_ceil = 0.22
+        self.max_weight = 0.15
         self.abs_gate = True
 
-        # Trend circuit breaker
+        # Trend circuit breaker with hysteresis buffer
         self.use_trend = True
         self.trend_ticker = "SPY"
         self.trend_window = 200
-        self.trend_keep = 0.10   # share of the equity target kept while risk-off (10% kept, 90% cut)
+        self.trend_band = 0.005  # 0.5% hysteresis band around 200-day SMA to prevent whipsaws
+        self.trend_keep = 0.00   # full equity exit during confirmed downtrends (0% kept, 100% cut)
 
         # Monthly rebalance
         self.rebalance_months = 1
@@ -72,13 +68,13 @@ class TradingStrategy(Strategy):
         self.bars = 260
 
         self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({"SHY": 0.13, "AGG": 0.14, "BND": 0.10, "IEF": 0.03,
-                          "TIP": 0.04, "TLT": 0.03, "GLD": 0.03})  # sums to 0.50
+        # Tilted toward short-duration fixed income to limit rate-shock drawdowns
+        self.base.update({"SHY": 0.160, "AGG": 0.120, "BND": 0.090, "IEF": 0.030,
+                          "TIP": 0.040, "TLT": 0.015, "GLD": 0.025})  # sums to 0.48
 
     @property
     def assets(self):
         return self.trading + [self.trend_ticker]
-        #return self.trading
 
     @property
     def interval(self):
@@ -117,17 +113,30 @@ class TradingStrategy(Strategy):
         return (math.exp(slope) ** 252 - 1.0) * 100.0 * r2
 
     def _risk_off(self, rows):
-        """True if trend ticker (SPY) closes below its 200-day average at last bar. None if data missing."""
+        """Stateless hysteresis-buffered trend check on SPY vs 200-day SMA. None if data missing."""
         n = self.trend_window
-        if len(rows) < n:
+        lookback = min(len(rows), n + 50)
+        if lookback < n:
             return None
-        c = [bar[self.trend_ticker]["close"] if self.trend_ticker in bar else float("nan") for bar in rows[-n:]]
+        sub = rows[-lookback:]
+        c = [bar[self.trend_ticker]["close"] if self.trend_ticker in bar else float("nan") for bar in sub]
         if any(x != x for x in c):
             return None
-        return c[-1] < sum(c) / n
+        arr = np.asarray(c, dtype=float)
+        sma_0 = arr[:n].mean()
+        if sma_0 <= 0:
+            return None
+        state = bool(arr[n - 1] < sma_0)
+        for i in range(n, len(arr)):
+            sma_i = arr[i - n + 1:i + 1].mean()
+            if not state and arr[i] < sma_i * (1.0 - self.trend_band):
+                state = True
+            elif state and arr[i] > sma_i * (1.0 + self.trend_band):
+                state = False
+        return state
 
     def _derisk(self, w):
-        """Keep trend_keep (10%) of each equity weight, move the rest (90%) to BIL."""
+        """Keep trend_keep (0%) of each equity weight, move the rest (100%) to BIL."""
         out = dict(w)
         cut = sum(out[t] for t in self.equity) * (1.0 - self.trend_keep)
         for t in self.equity:
@@ -149,24 +158,37 @@ class TradingStrategy(Strategy):
 
         cm = {t: self._clenow(win[t].values) for t in scored}
 
-        # Momentum multiplier: percentile rank inside the sleeve, lowest m_min ... highest m_max
+        # Realized volatility over vol_window for inverse-vol weighting and vol targeting
+        rets = np.log(win[scored].iloc[-self.vol_window:]).diff().dropna()
+        ann_vol = rets.std() * math.sqrt(252.0)
+
+        # Momentum multiplier combined with square-root inverse-volatility tilt within each sleeve
         mult = {}
         for group in (self.equity, self.bonds):
             rk = pd.Series({t: cm[t] for t in group}).rank(method="average")
             for t in group:
                 r = (rk[t] - 1.0) / (len(group) - 1.0)
-                mult[t] = self.m_min * (self.m_max / self.m_min) ** r
+                mom_m = self.m_min * (self.m_max / self.m_min) ** r
+                inv_vol = (1.0 / max(float(ann_vol[t]), 0.04)) ** 0.5
+                mult[t] = mom_m * inv_vol
 
+        # Normalize within each sleeve first so strategic sleeve weights are preserved before banding
         risky = 1.0 - self.cash_min
-        raw = {t: self.base[t] * mult[t] for t in scored}
+        raw = {}
+        for group, sleeve_base in ((self.equity, self.base_equity), (self.bonds, self.base_bonds)):
+            g_raw = {t: self.base[t] * mult[t] for t in group}
+            g_sum = sum(g_raw.values())
+            for t in group:
+                raw[t] = (g_raw[t] / g_sum) * sleeve_base if g_sum > 0 else 0.0
+
         tot = sum(raw.values())
-        w = {t: raw[t] / tot * risky for t in scored}
+        w = {t: raw[t] / tot * risky for t in scored} if tot > 0 else {t: 0.0 for t in scored}
 
         # Equity band: rescale both sleeves to the nearest bound
         if self.use_band:
             e = sum(w[t] for t in self.equity)
             e2 = min(max(e, self.e_floor), self.e_ceil)
-            if abs(e2 - e) > 1e-12:
+            if abs(e2 - e) > 1e-12 and e > 0 and (risky - e) > 0:
                 for t in self.equity:
                     w[t] *= e2 / e
                 for t in self.bonds:
@@ -178,6 +200,21 @@ class TradingStrategy(Strategy):
             for t in scored:
                 if cm[t] < 0:
                     w[t] = 0.0
+
+        # Cap single-asset concentration
+        for t in scored:
+            if w[t] > self.max_weight:
+                w[t] = self.max_weight
+
+        # Ex-ante portfolio volatility target overlay: scale risky basket into BIL if vol > target_vol
+        w_vec = np.array([w[t] for t in scored], dtype=float)
+        if w_vec.sum() > 0 and len(rets) > 10:
+            cov_ann = rets.cov().values * 252.0
+            port_vol = float(np.sqrt(np.dot(w_vec, np.dot(cov_ann, w_vec))))
+            if port_vol > self.target_vol and port_vol > 0:
+                vol_scale = self.target_vol / port_vol
+                for t in scored:
+                    w[t] *= vol_scale
 
         tgt = {a: 0.0 for a in self.trading}
         tgt.update(w)
@@ -194,7 +231,6 @@ class TradingStrategy(Strategy):
 
     def _alloc(self, w):
         out = {a: float(w.get(a, 0.0)) for a in self.trading}
-        #out[self.benchmark] = 0.0
         total = sum(out.values())
         if total > 1.0:
             out = {k: v / total for k, v in out.items()}
