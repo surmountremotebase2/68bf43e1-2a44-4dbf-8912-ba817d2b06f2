@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
 
         # Enforce minimum 300-bar history required for valid 300-day SMA calculation;
         # park capital in 1-3 Month U.S. Treasury Bills (BIL) during warm-up period.
-        if len(ohlcv) < 1:
+        if len(ohlcv) < long_sma:
             return TargetAllocation({"QQQ": 0.0, "GLD": 0.0, "BIL": 1.0})
 
         # Extract daily closing price series for QQQ and GLD
@@ -60,7 +60,7 @@ class TradingStrategy(Strategy):
         qqq_close_today = qqq_close.iloc[-1]
         gld_close_today = gld_close.iloc[-1]
 
-        if [qqq_sma, gld_sma, current_ratio_ema5, current_ratio_sma50]).any():
+        if pd.isna([qqq_sma, gld_sma, current_ratio_ema5, current_ratio_sma50]).any():
             return TargetAllocation({"QQQ": 0.0, "GLD": 0.0, "BIL": 1.0})
 
         # Initialize mutually exclusive target weights (100% single-asset allocation)
@@ -78,6 +78,13 @@ class TradingStrategy(Strategy):
             gld_weight = 1.0
         else:
             bil_weight = 1.0
+
+        log(
+            f"QQQ/GLD 5-EMA: {current_ratio_ema5:.4f} | 50-SMA: {current_ratio_sma50:.4f} | "
+            f"QQQ: {qqq_close_today:.2f} (SMA300: {qqq_sma:.2f}) | "
+            f"GLD: {gld_close_today:.2f} (SMA300: {gld_sma:.2f}) -> "
+            f"Allocation QQQ: {qqq_weight}, GLD: {gld_weight}, BIL: {bil_weight}"
+        )
 
         return TargetAllocation({
             "QQQ": qqq_weight,
