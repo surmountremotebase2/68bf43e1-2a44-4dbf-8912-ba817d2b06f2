@@ -32,7 +32,7 @@ class TradingStrategy(Strategy):
 
         # Enforce minimum 300-bar history required for valid 300-day SMA calculation;
         # park capital in 1-3 Month U.S. Treasury Bills (BIL) during warm-up period.
-        if len(ohlcv) < long_sma:
+        if not len(ohlcv) > 0:
             return TargetAllocation({"QQQ": 0.0, "GLD": 0.0, "BIL": 1.0})
 
         # Extract daily closing price series for QQQ and GLD
