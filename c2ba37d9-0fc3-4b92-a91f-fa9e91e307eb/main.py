@@ -55,8 +55,8 @@ class TradingStrategy(Strategy):
         # Risk profile
         self.use_band = True
         self.e_floor = 0.20
-        self.e_ceil = 0.35
-        self.max_weight = 0.25
+        self.e_ceil = 0.30
+        self.max_weight = 0.2
         self.abs_gate = True
 
         # Trend circuit breaker
