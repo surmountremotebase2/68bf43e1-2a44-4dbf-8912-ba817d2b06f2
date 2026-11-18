@@ -54,9 +54,9 @@ class TradingStrategy(Strategy):
 
         # Risk profile
         self.use_band = True
-        self.e_floor = 0.15
-        self.e_ceil = 0.30
-        self.max_weight = 0.2
+        self.e_floor = 0.20
+        self.e_ceil = 0.35
+        self.max_weight = 0.25
         self.abs_gate = True
 
         # Trend circuit breaker
@@ -72,8 +72,8 @@ class TradingStrategy(Strategy):
         self.bars = 260
 
         self.base = {t: self.base_equity / len(self.equity) for t in self.equity}
-        self.base.update({"SHY": 0.10, "AGG": 0.14, "BND": 0.10, "IEF": 0.03,
-                          "TIP": 0.04, "TLT": 0.03, "GLD": 0.06})  # sums to 0.50
+        self.base.update({"SHY": 0.13, "AGG": 0.14, "BND": 0.10, "IEF": 0.03,
+                          "TIP": 0.04, "TLT": 0.03, "GLD": 0.03})  # sums to 0.50
 
     @property
     def assets(self):
