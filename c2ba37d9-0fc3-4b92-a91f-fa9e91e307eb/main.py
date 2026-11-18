@@ -43,8 +43,8 @@ class TradingStrategy(Strategy):
         self.trading = self.equity + self.bonds + [self.cash]
 
         # Base (strategic) weights: 50 / 50 base scaled to 95% risk + 5% cash
-        self.base_equity = 0.50
-        self.base_bonds = 0.45
+        self.base_equity = 0.40
+        self.base_bonds = 0.55
         self.cash_min = 0.05
 
         # Clenow Momentum and weight scaling
