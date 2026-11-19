@@ -300,16 +300,5 @@ class TradingStrategy(Strategy):
         # Log turnover and allocation details
         turnover = sum(abs(target[a] - current[a]) for a in self.trading) / 2.0
 
-        log(
-            "%s|%s|eq=%.3f|neg=%d|off=%s|turn=%.3f|%s" % (
-                stamp,
-                reason,
-                info["equity"],
-                info["n_neg"],
-                risk_off,
-                turnover,
-                ",".join("%s:%.4f" % (k, v) for k, v in target.items() if v > 1e-9)
-            )
-        )
 
         return self._alloc(target)
