@@ -184,8 +184,8 @@ class TradingStrategy(Strategy):
         alloc = min(self.max_alloc,
                     self.risk_per_trade / (stop_width / entry))
 
-        log(f"ORB {today_str} dir={'LONG' if direction == 1 else 'SHORT'} "
-            f"entry={entry:.2f} stop={stop_price:.2f} alloc={alloc:.3f}")
+        #log(f"ORB {today_str} dir={'LONG' if direction == 1 else 'SHORT'} "
+        #    f"entry={entry:.2f} stop={stop_price:.2f} alloc={alloc:.3f}")
 
         if direction == 1:
             return TargetAllocation({self.signal_ticker: alloc,
