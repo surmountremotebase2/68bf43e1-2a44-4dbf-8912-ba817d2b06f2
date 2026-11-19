@@ -28,7 +28,7 @@ class TradingStrategy(Strategy):
         lookback = 50
         long_sma = 252
 
-        # Enforce minimum 300-bar history required for valid 300-day SMA calculation;
+        # Enforce minimum 252-bar history required for valid 252-day SMA calculation;
         # park capital in 1-3 Month U.S. Treasury Bills (BIL) during warm-up period.
         if len(ohlcv) < lookback:
             return TargetAllocation({})
@@ -41,7 +41,7 @@ class TradingStrategy(Strategy):
         qqq_gld_ratio = qqq_close / gld_close
 
         
-        # 2. Calculate 300-day SMAs for absolute trend filtering and 5-EMA / 50-SMA for ratio momentum
+        # 2. Calculate 252-day SMAs for absolute trend filtering and 5-EMA / 50-SMA for ratio momentum
         qqq_sma = 0
         gld_sma = 0
         if len(qqq_close) > long_sma:
