@@ -26,7 +26,7 @@ class TradingStrategy(Strategy):
         ohlcv = data["ohlcv"]
 
         lookback = 50
-        long_sma = 200
+        long_sma = 252
 
         # Enforce minimum 300-bar history required for valid 300-day SMA calculation;
         # park capital in 1-3 Month U.S. Treasury Bills (BIL) during warm-up period.
